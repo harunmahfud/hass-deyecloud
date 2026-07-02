@@ -88,9 +88,25 @@ def _parse_api_date(value) -> date | None:
     if isinstance(value, date):
         return value
 
+    # Some API regions return epoch timestamps (seconds or milliseconds).
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            ts = float(value)
+            if ts > 1e12:  # milliseconds
+                ts /= 1000.0
+            if ts > 1e8:  # plausible epoch seconds (>1973)
+                return datetime.fromtimestamp(ts, tz=dt_util.DEFAULT_TIME_ZONE).date()
+        except (ValueError, OverflowError, OSError):
+            return None
+        return None
+
     text = str(value).strip()
     if not text:
         return None
+
+    # Epoch given as a numeric string.
+    if text.isdigit() and len(text) >= 10:
+        return _parse_api_date(int(text))
 
     # Common API formats: YYYY-MM-DD, YYYY-MM-DD HH:MM:SS,
     # YYYY-MM-DDTHH:MM:SS..., YYYY/MM/DD.
@@ -104,6 +120,35 @@ def _parse_api_date(value) -> date | None:
         return datetime.strptime(text[:10], "%Y-%m-%d").date()
     except ValueError:
         return None
+
+
+def _record_date(item: dict) -> date | None:
+    """Extract the calendar date a DeyeCloud data record belongs to.
+
+    DeyeCloud is not consistent across regions/accounts: some responses carry
+    a string date field, others only carry integer year/month/day fields the
+    same way monthly records carry year/month. Support both, otherwise strict
+    date matching silently never matches and daily sensors go Unknown
+    (issue #15).
+    """
+    item_date = _parse_api_date(
+        item.get("date")
+        or item.get("time")
+        or item.get("timestamp")
+        or item.get("collectionTime")
+    )
+    if item_date is not None:
+        return item_date
+
+    year = item.get("year")
+    month = item.get("month")
+    day = item.get("day")
+    try:
+        if year and month and day:
+            return date(int(year), int(month), int(day))
+    except (TypeError, ValueError):
+        return None
+    return None
 
 
 def _numeric_value(record: dict | None, key: str) -> float | None:
@@ -131,17 +176,31 @@ def _records_look_like_same_daily_bucket(record: dict | None, reference: dict | 
         return False
 
     matched_non_zero_values = 0
+    reference_non_zero_keys = 0
     for key in _DAILY_ZERO_RECORD_KEYS:
         current = _numeric_value(record, key)
         previous = _numeric_value(reference, key)
+        if previous is not None and previous > _FLOAT_EPSILON:
+            reference_non_zero_keys += 1
         if current is None or previous is None:
             continue
-        if previous > _FLOAT_EPSILON and abs(current - previous) <= _FLOAT_EPSILON:
+        # Use a small relative tolerance: the cloud sometimes serves a stale
+        # bucket that is a slightly older snapshot of yesterday, not an exact
+        # copy. Treating "almost yesterday's total" as fresh Today data caused
+        # negative Energy Dashboard deltas at midnight (issue #14).
+        tolerance = max(_FLOAT_EPSILON, previous * 0.02)
+        if previous > _FLOAT_EPSILON and abs(current - previous) <= tolerance:
             matched_non_zero_values += 1
 
-    # One exact match can happen naturally; two or more across independent
-    # energy counters strongly indicates the cloud returned the old bucket.
-    return matched_non_zero_values >= 2
+    if reference_non_zero_keys == 0:
+        return False
+
+    # One exact match can happen naturally when several counters are active;
+    # two or more across independent energy counters strongly indicates the
+    # cloud returned the old bucket. For stations where only one counter is
+    # non-zero (e.g. solar-only), a single match is already conclusive.
+    required_matches = min(2, reference_non_zero_keys)
+    return matched_non_zero_values >= required_matches
 
 
 def _is_midnight_guard_window(now: datetime) -> bool:
@@ -161,12 +220,7 @@ def _select_daily_record(
     has_date_field = False
 
     for item in daily_items:
-        item_date = _parse_api_date(
-            item.get("date")
-            or item.get("time")
-            or item.get("timestamp")
-            or item.get("collectionTime")
-        )
+        item_date = _record_date(item)
         if item_date is None:
             continue
         has_date_field = True
@@ -595,6 +649,20 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
                     exc,
                 )
 
+            # If the rolling window returned exactly one undated record per
+            # requested day, map them positionally (the API documents day-by-day
+            # interval records from startAt to endAt-excluded, in order). This
+            # keeps Yesterday / Day Before working on accounts whose responses
+            # carry no per-record date information at all (issue #15).
+            range_positional: dict[str, dict] = {}
+            if len(range_daily_items) == len(days) and all(
+                _record_date(item) is None for item in range_daily_items
+            ):
+                range_positional = {
+                    d.isoformat(): item
+                    for d, item in zip(days, range_daily_items)
+                }
+
             for d in days:
                 day = d.isoformat()
                 next_day = d + timedelta(days=1)
@@ -608,6 +676,12 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
                     day,
                     allow_undated_fallback=False,
                 )
+
+                # Positional fallback from the rolling window. Never trust it
+                # for Today during the post-midnight guard window, where the
+                # cloud is known to serve stale previous-day buckets.
+                if matched_item is None and not in_midnight_guard:
+                    matched_item = range_positional.get(day)
 
                 daily_items = []
                 if matched_item is None:
@@ -641,11 +715,15 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
                             )
 
                     if not daily_items:
-                        if d == today_date:
+                        if d == today_date and day not in data["daily"]:
                             # At midnight DeyeCloud may not have a valid record
                             # for the new day yet. Today should start from 0,
                             # not from yesterday's final value and not as
-                            # Unknown.
+                            # Unknown. If a same-date cached record already
+                            # exists, keep it: resetting Today to 0 during a
+                            # transient midday API outage would make
+                            # total_increasing statistics double-count the
+                            # recovery jump.
                             data["daily"][day] = _empty_daily_record(day)
                         # Otherwise keep same-date cached value if available.
                         continue
@@ -669,12 +747,20 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
 
                 if matched_item is not None:
                     data["daily"][day] = matched_item
-                elif d == today_date:
+                elif d == today_date and day not in data["daily"]:
                     # API returned only older/foreign/undated records. Do not map
                     # them into Today, otherwise HA can record yesterday's total
-                    # into the new Energy Dashboard day.
+                    # into the new Energy Dashboard day. Keep an existing
+                    # same-date cached record instead of resetting to 0.
                     data["daily"][day] = _empty_daily_record(day)
                 # Else keep same-date cached value if available.
+
+            # Drop cached days no longer exposed by any sensor so the
+            # per-station cache does not grow forever.
+            keep_days = {d.isoformat() for d in days}
+            data["daily"] = {
+                key: value for key, value in data["daily"].items() if key in keep_days
+            }
         except Exception as exc:
             _LOGGER.error("Error updating daily history for station %s: %s", station_id, exc)
 
@@ -732,6 +818,45 @@ class DeyeCloudSensor(CoordinatorEntity, SensorEntity):
         self._device_key = device_key
 
     @property
+    def last_reset(self):
+        """Return the start of the period a snapshot sensor represents.
+
+        Yesterday / Day Before / Last Month / historical month sensors keep
+        state_class "total" for backward compatibility with existing long-term
+        statistics. Without last_reset, Home Assistant records the midnight (or
+        month rollover) value change as a plain delta, which is negative
+        whenever the new period total is lower than the old one — this is what
+        produced negative Energy Dashboard values at midnight (issue #14).
+        With last_reset set to the period start, each rollover begins a new
+        metering cycle instead of producing a negative delta.
+        """
+        # last_reset is only valid for state_class "total". Today sensors are
+        # total_increasing and must not define it.
+        if getattr(self, "_attr_state_class", None) != "total":
+            return None
+
+        tz = dt_util.DEFAULT_TIME_ZONE
+
+        if self._sensor_type == "daily" and self._date_key in _RELATIVE_DAY_OFFSETS:
+            target_day = dt_util.now().date() - timedelta(
+                days=_RELATIVE_DAY_OFFSETS[self._date_key]
+            )
+            return datetime.combine(target_day, datetime.min.time(), tzinfo=tz)
+
+        if self._sensor_type == "monthly_metric" and self._date_key == "last":
+            target = dt_util.now() - relativedelta(months=1)
+            return datetime(target.year, target.month, 1, tzinfo=tz)
+
+        if self._sensor_type == "monthly_raw" and self._date_key:
+            try:
+                year, month = map(int, self._date_key.split("_"))
+                return datetime(year, month, 1, tzinfo=tz)
+            except (ValueError, TypeError):
+                return None
+
+        return None
+
+    @property
     def native_value(self):
         """Return the sensor value."""
         if not self.coordinator.data or not self._station_id:
@@ -760,7 +885,15 @@ class DeyeCloudSensor(CoordinatorEntity, SensorEntity):
 
             elif self._sensor_type == "daily":
                 date_str = _resolve_daily_date_key(self._date_key)
-                daily_data = station_data.get("daily", {}).get(date_str, {})
+                daily_data = station_data.get("daily", {}).get(date_str)
+                if daily_data is None:
+                    # Right after local midnight the entity already resolves to
+                    # the new date, but the coordinator may not have published
+                    # a record for it yet. Today must start the new day at 0
+                    # instead of going Unknown or holding yesterday's value.
+                    if self._date_key == "today":
+                        return 0.0
+                    return None
                 return _as_float_or_original(daily_data.get(self._metric_key))
 
             elif self._sensor_type == "device":
