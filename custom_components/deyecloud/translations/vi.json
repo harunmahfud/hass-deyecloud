@@ -10,12 +10,14 @@
           "app_id": "App ID",
           "app_secret": "App Secret",
           "base_url": "Base URL",
-          "start_month": "Tháng bắt đầu"
+          "start_month": "Tháng bắt đầu",
+          "company_id": "Company ID (không bắt buộc)"
         }
       }
     },
     "error": {
-      "auth_failed": "Xác thực thất bại. Vui lòng kiểm tra tên đăng nhập/email, mật khẩu, App ID, App Secret và Base URL."
+      "auth_failed": "Xác thực thất bại. Vui lòng kiểm tra tên đăng nhập/email, mật khẩu, App ID, App Secret và Base URL.",
+      "no_stations_found": "Xác thực thành công nhưng không truy cập được trạm nào. Tài khoản installer cần chọn đúng Company ID."
     }
   },
   "options": {
@@ -29,12 +31,14 @@
           "app_id": "App ID",
           "app_secret": "App Secret",
           "base_url": "Base URL",
-          "start_month": "Tháng bắt đầu"
+          "start_month": "Tháng bắt đầu",
+          "company_id": "Company ID (không bắt buộc)"
         }
       }
     },
     "error": {
-      "auth_failed": "Xác thực thất bại. Vui lòng kiểm tra tên đăng nhập/email, mật khẩu, App ID, App Secret và Base URL."
+      "auth_failed": "Xác thực thất bại. Vui lòng kiểm tra tên đăng nhập/email, mật khẩu, App ID, App Secret và Base URL.",
+      "no_stations_found": "Xác thực thành công nhưng không truy cập được trạm nào. Tài khoản installer cần chọn đúng Company ID."
     }
   }
 }

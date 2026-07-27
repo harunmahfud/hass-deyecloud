@@ -28,6 +28,12 @@ from .const import (
     CONF_START_MONTH,
     CONF_COMPANY_ID,
 )
+from .data import (
+    _DAILY_ZERO_RECORD_KEYS,
+    batched_device_serials,
+    empty_daily_record as _empty_daily_record,
+    should_reject_stale_today as _should_reject_stale_today,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,28 +53,17 @@ _DAILY_LABELS = {
     "today": "Today",
 }
 
-
-_DAILY_ZERO_RECORD_KEYS = (
-    "generationValue",
-    "consumptionValue",
-    "gridValue",
-    "purchaseValue",
-    "chargeValue",
-    "dischargeValue",
+_STATION_LATEST_SENSORS = (
+    ("generationPower", "Solar Generation Power", "W", "power"),
+    ("consumptionPower", "Load Power", "W", "power"),
+    ("gridPower", "Grid Export Power", "W", "power"),
+    ("purchasePower", "Grid Import Power", "W", "power"),
+    ("wirePower", "Grid Net Power", "W", "power"),
+    ("chargePower", "Battery Charge Power", "W", "power"),
+    ("dischargePower", "Battery Discharge Power", "W", "power"),
+    ("batteryPower", "Battery Power", "W", "power"),
+    ("batterySOC", "Battery State of Charge", "%", "battery"),
 )
-
-
-def _empty_daily_record(day: str) -> dict:
-    """Return an explicit zero daily record for a date.
-
-    This is used right after midnight when DeyeCloud has not yet published
-    the new day's daily record. It prevents Today sensors from carrying
-    yesterday's final values into the new day or becoming Unknown.
-    """
-    record = {"date": day}
-    for key in _DAILY_ZERO_RECORD_KEYS:
-        record[key] = 0.0
-    return record
 
 
 # DeyeCloud can lag right after local midnight and may still return the
@@ -76,7 +71,6 @@ def _empty_daily_record(day: str) -> dict:
 # previous-day aggregate as the new day's "Today" value, because Home
 # Assistant may record it into the new day's Energy Dashboard statistics.
 _MIDNIGHT_STALE_GUARD = timedelta(hours=2)
-_FLOAT_EPSILON = 0.001
 
 
 def _parse_api_date(value) -> date | None:
@@ -149,58 +143,6 @@ def _record_date(item: dict) -> date | None:
     except (TypeError, ValueError):
         return None
     return None
-
-
-def _numeric_value(record: dict | None, key: str) -> float | None:
-    """Return a numeric value from a daily/monthly record if possible."""
-    if not record:
-        return None
-    try:
-        value = record.get(key)
-        if value is None or value == "":
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _records_look_like_same_daily_bucket(record: dict | None, reference: dict | None) -> bool:
-    """Detect a stale daily record that is likely copied from yesterday.
-
-    Around midnight DeyeCloud may return yesterday's final values while Home
-    Assistant is already on the new local date. If today's candidate has the
-    same non-zero energy totals as yesterday, treat it as stale and publish 0
-    until DeyeCloud exposes a real current-day bucket.
-    """
-    if not record or not reference:
-        return False
-
-    matched_non_zero_values = 0
-    reference_non_zero_keys = 0
-    for key in _DAILY_ZERO_RECORD_KEYS:
-        current = _numeric_value(record, key)
-        previous = _numeric_value(reference, key)
-        if previous is not None and previous > _FLOAT_EPSILON:
-            reference_non_zero_keys += 1
-        if current is None or previous is None:
-            continue
-        # Use a small relative tolerance: the cloud sometimes serves a stale
-        # bucket that is a slightly older snapshot of yesterday, not an exact
-        # copy. Treating "almost yesterday's total" as fresh Today data caused
-        # negative Energy Dashboard deltas at midnight (issue #14).
-        tolerance = max(_FLOAT_EPSILON, previous * 0.02)
-        if previous > _FLOAT_EPSILON and abs(current - previous) <= tolerance:
-            matched_non_zero_values += 1
-
-    if reference_non_zero_keys == 0:
-        return False
-
-    # One exact match can happen naturally when several counters are active;
-    # two or more across independent energy counters strongly indicates the
-    # cloud returned the old bucket. For stations where only one counter is
-    # non-zero (e.g. solar-only), a single match is already conclusive.
-    required_matches = min(2, reference_non_zero_keys)
-    return matched_non_zero_values >= required_matches
 
 
 def _is_midnight_guard_window(now: datetime) -> bool:
@@ -279,7 +221,7 @@ def _as_float_or_original(value):
 
 def _normalize_unit(unit: str | None) -> str | None:
     """Normalize common API units for Home Assistant."""
-    if unit == "C":
+    if unit in {"C", "℃", "°C"}:
         return "°C"
     return unit
 
@@ -345,17 +287,49 @@ async def _async_station_list(session, token, base_url):
     url = f"{base_url}/station/list"
     _LOGGER.debug("Fetching station list from API: %s", url)
     headers = {"Authorization": f"Bearer {token}"}
+    page = 1
+    size = 200
+    stations = []
 
-    j = await _post_json(session, url, headers=headers, payload={}, timeout=10)
-    if not j.get("success", True):
-        _LOGGER.error("Station list request failed: %s", j.get("msg"))
-        raise Exception(f"Station list request failed: {j.get('msg')}")
+    while True:
+        j = await _post_json(
+            session,
+            url,
+            headers=headers,
+            payload={"page": page, "size": size},
+            timeout=10,
+        )
+        if not j.get("success", True):
+            _LOGGER.error("Station list request failed: %s", j.get("msg"))
+            raise Exception(f"Station list request failed: {j.get('msg')}")
 
-    # DeyeCloud can return stationList: null for installer/business accounts
-    # when companyId is missing or the account has no accessible stations.
-    stations = _as_list(j.get("stationList"))
+        # DeyeCloud can return stationList: null for installer/business
+        # accounts when companyId is missing or no stations are accessible.
+        page_items = _as_list(j.get("stationList"))
+        stations.extend(page_items)
+        total = j.get("total")
+        if (total is not None and len(stations) >= int(total)) or len(page_items) < size:
+            break
+        page += 1
+
     _LOGGER.info("Received %d stations from API", len(stations))
     return stations
+
+
+async def _async_station_latest(session, token, station_id, base_url):
+    """Fetch the documented real-time station power flow values."""
+    url = f"{base_url}/station/latest"
+    headers = {"Authorization": f"Bearer {token}"}
+    j = await _post_json(
+        session,
+        url,
+        headers=headers,
+        payload={"stationId": int(station_id)},
+        timeout=10,
+    )
+    if not j.get("success"):
+        raise Exception(f"Station latest request failed: {j.get('msg')}")
+    return j
 
 
 async def _async_history(session, token, station_id, base_url):
@@ -416,6 +390,7 @@ async def _async_daily_history(session, token, station_id, base_url, start_date,
 
     items = _as_list(j.get("stationDataItems"))
     _LOGGER.debug("Received %d daily records for station_id %s", len(items), station_id)
+    _LOGGER.debug("Daily records for station_id %s: %s", station_id, items)
     return items
 
 
@@ -471,15 +446,50 @@ async def _async_get_device_status(session, token, base_url, device_list):
     url = f"{base_url}/device/latest"
     _LOGGER.debug("Fetching device status from API: %s with devices: %s", url, device_list)
     headers = {"Authorization": f"Bearer {token}"}
-    payload = {"deviceList": device_list}
+    devices = []
+    # The official OpenAPI contract limits /device/latest to ten serials per
+    # request. Sending a larger station in one request silently loses devices
+    # on some regions/accounts.
+    for batch in batched_device_serials(device_list):
+        j = await _post_json(
+            session,
+            url,
+            headers=headers,
+            payload={"deviceList": batch},
+            timeout=10,
+        )
+        if not j.get("success"):
+            _LOGGER.error("Device status request failed: %s", j.get("msg"))
+            raise Exception(f"Device status request failed: {j.get('msg')}")
+        devices.extend(_as_list(j.get("deviceDataList")))
 
-    j = await _post_json(session, url, headers=headers, payload=payload, timeout=10)
+    _LOGGER.debug("Received latest data for %d devices", len(devices))
+    return devices
+
+
+async def _async_get_device_measure_points(
+    session,
+    token,
+    base_url,
+    device_sn,
+):
+    """Fetch the authoritative set of supported device measurement keys."""
+    url = f"{base_url}/device/measurePoints"
+    headers = {"Authorization": f"Bearer {token}"}
+    j = await _post_json(
+        session,
+        url,
+        headers=headers,
+        payload={"deviceSn": device_sn},
+        timeout=10,
+    )
     if not j.get("success"):
-        _LOGGER.error("Device status request failed: %s", j.get("msg"))
-        raise Exception(f"Device status request failed: {j.get('msg')}")
-
-    _LOGGER.debug("Received device status: %s", j)
-    return _as_list(j.get("deviceDataList"))
+        raise Exception(f"Device measure-points request failed: {j.get('msg')}")
+    return [
+        key
+        for key in _as_list(j.get("measurePoints"))
+        if isinstance(key, str) and key
+    ]
 
 
 class DeyeCloudCoordinator(DataUpdateCoordinator):
@@ -498,6 +508,7 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
         self.token_expiry = None
         self._history_cache: dict[str, list[dict]] = {}
         self._history_last_update = None
+        self._measure_points_cache: dict[str, list[str]] = {}
 
     async def _async_update_data(self) -> dict:
         """Fetch data from API."""
@@ -585,6 +596,7 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
 
         data = {
             "info": station_info,
+            "latest": {},
             "history": [],
             # Preserve previous daily values when DeyeCloud temporarily returns
             # no daily record. This prevents Today sensors from jumping to
@@ -592,6 +604,24 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
             "daily": dict(previous_daily),
             "devices": {},
         }
+
+        # /station/latest exposes the aggregate real-time flow values requested
+        # in issue #16. They cannot be derived reliably by summing arbitrary
+        # inverter phase keys, especially for parallel installations.
+        try:
+            data["latest"] = await _async_station_latest(
+                session,
+                self.token,
+                station_id,
+                base_url,
+            )
+        except Exception as exc:
+            _LOGGER.error(
+                "Error updating real-time values for station %s: %s",
+                station_id,
+                exc,
+            )
+            data["latest"] = previous_station_data.get("latest", {})
 
         # Monthly history should not break daily/device updates if it fails.
         try:
@@ -734,12 +764,18 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
                         allow_undated_fallback=not in_midnight_guard,
                     )
 
-                if matched_item is not None and d == today_date and in_midnight_guard:
+                if matched_item is not None and d == today_date:
                     yesterday_key = (today_date - timedelta(days=1)).isoformat()
                     yesterday_record = data["daily"].get(yesterday_key)
-                    if _records_look_like_same_daily_bucket(matched_item, yesterday_record):
+                    cached_today = data["daily"].get(day)
+                    if _should_reject_stale_today(
+                        matched_item,
+                        yesterday_record,
+                        cached_today,
+                        in_midnight_guard=in_midnight_guard,
+                    ):
                         _LOGGER.debug(
-                            "Ignoring stale DeyeCloud daily record for station %s day %s during midnight guard",
+                            "Ignoring stale DeyeCloud daily record for station %s day %s",
                             station_id,
                             day,
                         )
@@ -772,7 +808,43 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
                 for device in device_status:
                     sn = device.get("deviceSn")
                     if sn:
-                        data["devices"][str(sn)] = device
+                        sn = str(sn)
+                        if sn not in self._measure_points_cache:
+                            try:
+                                self._measure_points_cache[sn] = (
+                                    await _async_get_device_measure_points(
+                                        session,
+                                        self.token,
+                                        base_url,
+                                        sn,
+                                    )
+                                )
+                            except Exception as exc:
+                                # Latest values remain usable on older firmware
+                                # that does not support measure-point discovery.
+                                _LOGGER.debug(
+                                    "Could not discover measure points for device %s: %s",
+                                    sn,
+                                    exc,
+                                )
+                                self._measure_points_cache[sn] = []
+
+                        data_items = _as_list(device.get("dataList"))
+                        present_keys = {
+                            item.get("key")
+                            for item in data_items
+                            if isinstance(item, dict)
+                        }
+                        # Entity setup happens once. Register supported points
+                        # even when /device/latest temporarily omits them, as
+                        # reported for PV5/PV6 in issue #11.
+                        data_items.extend(
+                            {"key": key, "value": None, "unit": None}
+                            for key in self._measure_points_cache[sn]
+                            if key not in present_keys
+                        )
+                        device["dataList"] = data_items
+                        data["devices"][sn] = device
         except Exception as exc:
             _LOGGER.error("Error updating devices for station %s: %s", station_id, exc)
 
@@ -896,6 +968,11 @@ class DeyeCloudSensor(CoordinatorEntity, SensorEntity):
                     return None
                 return _as_float_or_original(daily_data.get(self._metric_key))
 
+            elif self._sensor_type == "station_latest":
+                return _as_float_or_original(
+                    station_data.get("latest", {}).get(self._metric_key)
+                )
+
             elif self._sensor_type == "device":
                 device_data = station_data.get("devices", {}).get(self._device_sn, {})
                 for data_item in device_data.get("dataList") or []:
@@ -935,6 +1012,12 @@ class DeyeCloudSensor(CoordinatorEntity, SensorEntity):
 
         if self._station_id:
             attrs["station_id"] = self._station_id
+
+        if self._sensor_type == "station_latest" and self._station_id:
+            station_data = (self.coordinator.data or {}).get(self._station_id, {})
+            last_update = station_data.get("latest", {}).get("lastUpdateTime")
+            if last_update is not None:
+                attrs["last_update_time"] = last_update
 
         if self._date_key:
             if self._sensor_type == "monthly_raw":
@@ -995,6 +1078,22 @@ async def async_setup_entry(
 
     for station_id, station_data in coordinator.data.items():
         station_id = str(station_id)
+
+        # Aggregate real-time values from the documented /station/latest
+        # endpoint. These remain correct for stations with parallel inverters.
+        for metric_key, metric_name, unit, device_class in _STATION_LATEST_SENSORS:
+            entities.append(DeyeCloudSensor(
+                coordinator=coordinator,
+                sensor_type="station_latest",
+                name=f"{metric_name} {station_id}",
+                unique_id=f"{station_id}_latest_{metric_key}",
+                unit=unit,
+                device_class=device_class,
+                state_class="measurement",
+                station_id=station_id,
+                metric_key=metric_key,
+                extra_attributes={"metric": metric_name},
+            ))
 
         # Historical monthly generation sensors. Note: this still only creates entities
         # for months available at setup time, preserving the original behavior.
