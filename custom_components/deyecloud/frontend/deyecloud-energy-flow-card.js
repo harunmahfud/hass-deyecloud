@@ -1,4 +1,4 @@
-const CARD_VERSION = "2.2.1";
+const CARD_VERSION = "2.2.2";
 const CARD_TAG = "deyecloud-energy-flow-card";
 const EDITOR_TAG = "deyecloud-energy-flow-card-editor";
 
@@ -154,11 +154,11 @@ const STRINGS = {
 
 function escapeHtml(value) {
   return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function clamp(value, min, max) {
@@ -321,7 +321,12 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
   }
 
   _language() {
-    return this._hass?.language?.toLowerCase().startsWith("vi") ? "vi" : "en";
+    const rawLanguage =
+      this._hass?.language ||
+      this._hass?.locale?.language ||
+      window?.navigator?.language ||
+      "en";
+    return String(rawLanguage).toLowerCase().startsWith("vi") ? "vi" : "en";
   }
 
   _strings() {
@@ -437,31 +442,36 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
 
   _moreInfo(entityId) {
     if (!entityId) return;
-    const event = new Event("hass-more-info", { bubbles: true, composed: true });
-    event.detail = { entityId };
-    this.dispatchEvent(event);
+    this.dispatchEvent(
+      new CustomEvent("hass-more-info", {
+        bubbles: true,
+        composed: true,
+        detail: { entityId },
+      })
+    );
   }
 
   _render() {
     if (!this.shadowRoot || !this._hass) return;
 
-    const language = this._language();
-    const locale = language === "vi" ? "vi-VN" : "en-US";
-    const t = this._strings();
-    const stationIds = this._stationIds();
-    const stationId = this._selectedStationId();
+    try {
+      const language = this._language();
+      const locale = language === "vi" ? "vi-VN" : "en-US";
+      const t = this._strings();
+      const stationIds = this._stationIds();
+      const stationId = this._selectedStationId();
 
-    if (!stationId) {
-      this.shadowRoot.innerHTML = `
-        ${this._styles()}
-        <ha-card class="empty-card">
-          <div class="empty-visual">${iconSolar()}</div>
-          <h2>${escapeHtml(t.noStation)}</h2>
-          <p>${escapeHtml(t.noStationHelp)}</p>
-          <span>${escapeHtml(t.dataHint)}</span>
-        </ha-card>`;
-      return;
-    }
+      if (!stationId) {
+        this.shadowRoot.innerHTML = `
+          ${this._styles()}
+          <ha-card class="empty-card">
+            <div class="empty-visual">${iconSolar()}</div>
+            <h2>${escapeHtml(t.noStation)}</h2>
+            <p>${escapeHtml(t.noStationHelp)}</p>
+            <span>${escapeHtml(t.dataHint)}</span>
+          </ha-card>`;
+        return;
+      }
 
     const entity = (name) => this._findEntity(name, stationId);
     const entities = {
@@ -621,64 +631,76 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
         <section class="diagram-stage" aria-label="Deye solar realtime energy flow">
           <div class="ambient ambient-one"></div>
           <div class="ambient ambient-two"></div>
-          <svg class="flow-svg" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true">
-            <path class="flow-base" d="M500 139 C500 165 500 185 500 213" />
-            <path class="flow-base" d="M277 330 C310 330 328 330 362 330" />
-            <path class="flow-base" d="M638 330 C672 330 690 330 723 330" />
-            <path class="flow-base" d="M500 414 C500 436 500 451 500 473" />
+          <svg class="flow-svg" viewBox="0 0 1000 640" preserveAspectRatio="none" aria-hidden="true">
+            <path class="flow-base" d="M500 120 C500 160 500 190 500 238" />
+            <path class="flow-base" d="M232 320 C290 320 336 320 392 320" />
+            <path class="flow-base" d="M608 320 C664 320 710 320 768 320" />
+            <path class="flow-base" d="M500 402 C500 442 500 478 500 520" />
 
-            ${solarActive ? '<path class="flow-line solar-flow" d="M500 139 C500 165 500 185 500 213" />' : ""}
-            ${batteryChargeActive || batteryDischargeActive ? `<path class="flow-line battery-flow ${batteryChargeActive ? "reverse" : ""}" d="M277 330 C310 330 328 330 362 330" />` : ""}
-            ${gridImportActive || gridExportActive ? `<path class="flow-line grid-flow ${gridImportActive ? "reverse" : ""}" d="M638 330 C672 330 690 330 723 330" />` : ""}
-            ${loadActive ? '<path class="flow-line load-flow" d="M500 414 C500 436 500 451 500 473" />' : ""}
+            ${solarActive ? '<path class="flow-line solar-flow" d="M500 120 C500 160 500 190 500 238" />' : ""}
+            ${batteryChargeActive || batteryDischargeActive ? `<path class="flow-line battery-flow ${batteryChargeActive ? "reverse" : ""}" d="M232 320 C290 320 336 320 392 320" />` : ""}
+            ${gridImportActive || gridExportActive ? `<path class="flow-line grid-flow ${gridImportActive ? "reverse" : ""}" d="M608 320 C664 320 710 320 768 320" />` : ""}
+            ${loadActive ? '<path class="flow-line load-flow" d="M500 402 C500 442 500 478 500 520" />' : ""}
           </svg>
 
-          <span class="flow-label solar-label">${escapeHtml(formatPower(values.solar, locale))}</span>
-          <span class="flow-label battery-label">${escapeHtml(formatPower(batteryDisplayPower, locale))}</span>
-          <span class="flow-label grid-label">${escapeHtml(formatPower(gridDisplayPower, locale))}</span>
-          <span class="flow-label load-label">${escapeHtml(formatPower(values.load, locale))}</span>
+          ${solarActive ? `<span class="flow-label solar-label">${escapeHtml(formatPower(values.solar, locale))}</span>` : ""}
+          ${(batteryChargeActive || batteryDischargeActive) ? `<span class="flow-label battery-label">${escapeHtml(formatPower(batteryDisplayPower, locale))}</span>` : ""}
+          ${(gridImportActive || gridExportActive) ? `<span class="flow-label grid-label">${escapeHtml(formatPower(gridDisplayPower, locale))}</span>` : ""}
+          ${loadActive ? `<span class="flow-label load-label">${escapeHtml(formatPower(values.load, locale))}</span>` : ""}
 
-          ${node({
-            className: `solar-node ${solarActive ? "active" : ""}`,
-            title: t.solar,
-            status: solarActive ? t.generating : t.idle,
-            value: formatPower(values.solar, locale),
-            icon: iconSolar(),
-            entityId: entities.solar?.entityId,
-          })}
-          ${node({
-            className: `battery-node ${batteryChargeActive || batteryDischargeActive ? "active" : ""}`,
-            title: t.battery,
-            status: batteryStatus,
-            value: formatPower(batteryDisplayPower, locale),
-            icon: iconBattery(values.soc),
-            entityId: entities.soc?.entityId || entities.battery?.entityId,
-            badge: formatPercent(values.soc, locale),
-          })}
-          ${node({
-            className: "inverter-node active",
-            title: t.inverter,
-            status: currentAvailable ? t.supplying : t.unavailable,
-            value: formatPower(values.load + values.gridExport + values.batteryCharge, locale),
-            icon: iconInverter(),
-            entityId: entities.load?.entityId || entities.solar?.entityId,
-          })}
-          ${node({
-            className: `grid-node ${gridImportActive || gridExportActive ? "active" : ""}`,
-            title: t.grid,
-            status: gridStatus,
-            value: formatPower(gridDisplayPower, locale),
-            icon: iconGrid(),
-            entityId: (gridImportActive ? entities.gridImport : entities.gridExport)?.entityId || entities.gridNet?.entityId,
-          })}
-          ${node({
-            className: `home-node ${loadActive ? "active" : ""}`,
-            title: t.home,
-            status: loadActive ? t.supplying : t.idle,
-            value: formatPower(values.load, locale),
-            icon: iconHome(),
-            entityId: entities.load?.entityId,
-          })}
+          <div class="diagram-grid">
+            <div class="node-slot solar-slot">
+              ${node({
+                className: `solar-node ${solarActive ? "active" : ""}`,
+                title: t.solar,
+                status: solarActive ? t.generating : t.idle,
+                value: formatPower(values.solar, locale),
+                icon: iconSolar(),
+                entityId: entities.solar?.entityId,
+              })}
+            </div>
+            <div class="node-slot battery-slot">
+              ${node({
+                className: `battery-node ${batteryChargeActive || batteryDischargeActive ? "active" : ""}`,
+                title: t.battery,
+                status: batteryStatus,
+                value: formatPower(batteryDisplayPower, locale),
+                icon: iconBattery(values.soc),
+                entityId: entities.soc?.entityId || entities.battery?.entityId,
+                badge: formatPercent(values.soc, locale),
+              })}
+            </div>
+            <div class="node-slot inverter-slot">
+              ${node({
+                className: "inverter-node active",
+                title: t.inverter,
+                status: currentAvailable ? t.supplying : t.unavailable,
+                value: formatPower(values.load + values.gridExport + values.batteryCharge, locale),
+                icon: iconInverter(),
+                entityId: entities.load?.entityId || entities.solar?.entityId,
+              })}
+            </div>
+            <div class="node-slot grid-slot">
+              ${node({
+                className: `grid-node ${gridImportActive || gridExportActive ? "active" : ""}`,
+                title: t.grid,
+                status: gridStatus,
+                value: formatPower(gridDisplayPower, locale),
+                icon: iconGrid(),
+                entityId: (gridImportActive ? entities.gridImport : entities.gridExport)?.entityId || entities.gridNet?.entityId,
+              })}
+            </div>
+            <div class="node-slot home-slot">
+              ${node({
+                className: `home-node ${loadActive ? "active" : ""}`,
+                title: t.home,
+                status: loadActive ? t.supplying : t.idle,
+                value: formatPower(values.load, locale),
+                icon: iconHome(),
+                entityId: entities.load?.entityId,
+              })}
+            </div>
+          </div>
         </section>
 
         ${this._config.show_efficiency === false ? "" : `
@@ -737,6 +759,28 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
       if (!entityId) return;
       element.addEventListener("click", () => this._moreInfo(entityId));
     });
+
+    } catch (error) {
+      console.error("DeyeCloud Energy Flow Card render error", error);
+      this._renderError(error);
+    }
+  }
+
+  _renderError(error) {
+    const language = this._language();
+    const title = language === "vi" ? "Không thể hiển thị card DeyeCloud" : "Unable to display DeyeCloud card";
+    const help = language === "vi"
+      ? "Thử tải lại trình duyệt (Ctrl+F5). Nếu vẫn lỗi, hãy cập nhật integration lên bản mới nhất."
+      : "Try reloading the browser (Ctrl+F5). If the error persists, update the integration to the latest version.";
+    const details = error?.message ? escapeHtml(error.message) : "Unknown error";
+    this.shadowRoot.innerHTML = `
+      ${this._styles()}
+      <ha-card class="empty-card error-card">
+        <div class="empty-visual">${this._miniIcon("balance")}</div>
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml(help)}</p>
+        <code>${details}</code>
+      </ha-card>`;
   }
 
   _efficiencyItem(label, value, kind, locale, t) {
@@ -880,15 +924,17 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
           position: relative;
           width: calc(100% - 24px);
           margin: 4px 12px 0;
-          aspect-ratio: 5 / 3;
-          min-height: 310px;
-          max-height: 500px;
+          aspect-ratio: 4 / 3;
+          min-height: 400px;
+          max-height: 580px;
           overflow: hidden;
-          border-radius: 20px;
+          border-radius: 24px;
           background:
-            linear-gradient(180deg, color-mix(in srgb, var(--primary-color, #4d82f3) 8%, transparent), transparent 42%),
-            linear-gradient(0deg, color-mix(in srgb, var(--deye-battery) 5%, transparent), transparent 36%),
-            color-mix(in srgb, var(--deye-card) 88%, transparent);
+            radial-gradient(circle at 50% 10%, color-mix(in srgb, var(--deye-solar-soft) 65%, transparent), transparent 28%),
+            radial-gradient(circle at 12% 62%, color-mix(in srgb, var(--deye-battery-soft) 55%, transparent), transparent 24%),
+            radial-gradient(circle at 88% 62%, color-mix(in srgb, var(--deye-grid-soft) 55%, transparent), transparent 24%),
+            linear-gradient(180deg, color-mix(in srgb, var(--primary-color, #4d82f3) 6%, transparent), transparent 40%),
+            color-mix(in srgb, var(--deye-card) 96%, transparent);
           border: 1px solid var(--deye-border);
           isolation: isolate;
         }
@@ -929,32 +975,49 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
         .flow-label {
           position: absolute;
           z-index: 4;
-          padding: 4px 8px;
+          padding: 5px 10px;
           border: 1px solid var(--deye-border);
           border-radius: 999px;
-          background: color-mix(in srgb, var(--deye-card) 91%, transparent);
+          background: color-mix(in srgb, var(--deye-card) 94%, transparent);
           backdrop-filter: blur(8px);
-          box-shadow: 0 4px 14px rgba(20, 28, 45, .08);
+          box-shadow: 0 6px 18px rgba(20, 28, 45, .08);
           color: var(--deye-text);
-          font-size: clamp(9px, 1.6vw, 12px);
+          font-size: clamp(10px, 1.4vw, 12px);
           line-height: 1;
-          font-weight: 750;
+          font-weight: 800;
           white-space: nowrap;
         }
-        .solar-label { left: 50%; top: 26%; transform: translate(-50%, -50%); color: color-mix(in srgb, var(--deye-solar) 80%, var(--deye-text)); }
-        .battery-label { left: 31.5%; top: 55%; transform: translate(-50%, -50%); color: var(--deye-battery); }
-        .grid-label { left: 68.5%; top: 55%; transform: translate(-50%, -50%); color: var(--deye-grid); }
-        .load-label { left: 50%; top: 74%; transform: translate(-50%, -50%); color: var(--deye-load); }
+        .solar-label { left: 50%; top: 26%; transform: translate(-50%, -50%); color: color-mix(in srgb, var(--deye-solar) 82%, var(--deye-text)); }
+        .battery-label { left: 31.5%; top: 49%; transform: translate(-50%, -50%); color: var(--deye-battery); }
+        .grid-label { left: 68.5%; top: 49%; transform: translate(-50%, -50%); color: var(--deye-grid); }
+        .load-label { left: 50%; top: 72.5%; transform: translate(-50%, -50%); color: var(--deye-load); }
+
+        .diagram-grid {
+          position: absolute;
+          inset: 16px;
+          z-index: 3;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(210px, 1.18fr) minmax(0, 1fr);
+          grid-template-rows: minmax(90px, 1fr) minmax(110px, 1.15fr) minmax(90px, 1fr);
+          gap: 16px 18px;
+          align-items: center;
+        }
+        .node-slot { min-width: 0; display: flex; align-items: center; justify-content: center; }
+        .solar-slot { grid-column: 2; grid-row: 1; }
+        .battery-slot { grid-column: 1; grid-row: 2; justify-content: flex-start; }
+        .inverter-slot { grid-column: 2; grid-row: 2; }
+        .grid-slot { grid-column: 3; grid-row: 2; justify-content: flex-end; }
+        .home-slot { grid-column: 2; grid-row: 3; }
 
         .flow-node {
-          position: absolute;
+          position: relative;
           z-index: 3;
           display: flex;
           align-items: center;
           gap: clamp(6px, 1.2vw, 12px);
-          width: 27%;
-          min-height: 19%;
-          padding: clamp(8px, 1.4vw, 14px);
+          width: min(100%, 240px);
+          min-height: 98px;
+          padding: clamp(10px, 1.4vw, 15px);
           text-align: left;
           color: var(--deye-text);
           background: color-mix(in srgb, var(--deye-card) 92%, transparent);
@@ -970,11 +1033,11 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
         .flow-node:disabled { cursor: default; opacity: .72; }
         .flow-node.active { border-color: color-mix(in srgb, currentColor 38%, var(--deye-border)); }
 
-        .solar-node { left: 36.5%; top: 2.5%; color: var(--deye-solar); }
-        .battery-node { left: 1.5%; top: 43%; color: var(--deye-battery); }
-        .inverter-node { left: 36.5%; top: 35.5%; color: var(--deye-inverter); }
-        .grid-node { right: 1.5%; top: 43%; color: var(--deye-grid); }
-        .home-node { left: 36.5%; bottom: 2.5%; color: var(--deye-load); }
+        .solar-node { color: var(--deye-solar); }
+        .battery-node { color: var(--deye-battery); }
+        .inverter-node { color: var(--deye-inverter); width: min(100%, 220px); min-height: 108px; }
+        .grid-node { color: var(--deye-grid); }
+        .home-node { color: var(--deye-load); }
 
         .node-icon {
           flex: 0 0 clamp(30px, 5.4vw, 53px);
@@ -985,9 +1048,9 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
         }
         .node-icon svg { width: 100%; height: 100%; overflow: visible; }
         .node-copy { min-width: 0; display: flex; flex-direction: column; }
-        .node-title { color: var(--deye-muted); font-size: clamp(9px, 1.5vw, 12px); line-height: 1.15; }
-        .node-copy strong { color: var(--deye-text); font-size: clamp(13px, 2.2vw, 21px); line-height: 1.25; white-space: nowrap; }
-        .node-status { color: currentColor; font-size: clamp(8px, 1.4vw, 11px); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .node-title { color: var(--deye-muted); font-size: clamp(10px, 1.2vw, 12px); line-height: 1.15; }
+        .node-copy strong { color: var(--deye-text); font-size: clamp(16px, 1.9vw, 26px); line-height: 1.25; white-space: nowrap; }
+        .node-status { color: currentColor; font-size: clamp(10px, 1.1vw, 12px); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .node-badge {
           position: absolute;
           right: 7px;
@@ -1274,6 +1337,16 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
           .balance-item { margin-top: 0; }
           .daily-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         }
+        @container (max-width: 520px) {
+          .diagram-stage { aspect-ratio: 1 / 1.02; min-height: 370px; }
+          .diagram-grid {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1fr);
+            gap: 10px;
+          }
+          .flow-node { min-height: 88px; }
+          .node-copy strong { font-size: 14px; }
+        }
+
 
         .empty-card {
           display: flex;
@@ -1290,6 +1363,19 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
         .empty-card h2 { margin: 18px 0 6px; font-size: 18px; }
         .empty-card p { margin: 0; color: var(--deye-muted); }
         .empty-card > span { margin-top: 12px; color: var(--deye-muted); font-size: 11px; }
+        .error-card code {
+          display: block;
+          max-width: 100%;
+          margin-top: 14px;
+          padding: 10px 12px;
+          overflow: auto;
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--deye-load-soft) 42%, transparent);
+          color: var(--deye-load);
+          font-size: 12px;
+          white-space: normal;
+          word-break: break-word;
+        }
 
         @keyframes flowForward { to { stroke-dashoffset: -42; } }
         @keyframes livePulse {
@@ -1302,16 +1388,22 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
           .card-header { grid-template-columns: auto minmax(0, 1fr); padding: 15px 14px 8px; }
           .updated-at { display: none; }
           .brand-mark { width: 42px; height: 42px; }
-          .diagram-stage { width: calc(100% - 16px); margin-inline: 8px; min-height: 285px; }
-          .flow-node { width: 29%; padding: 7px; }
-          .solar-node, .inverter-node, .home-node { left: 35.5%; }
-          .battery-node { left: 1%; }
-          .grid-node { right: 1%; }
-          .node-icon { flex-basis: 27px; width: 27px; height: 27px; }
-          .node-title { display: none; }
-          .node-copy strong { font-size: clamp(11px, 3.6vw, 15px); }
-          .node-status { font-size: 8px; }
-          .flow-label { padding: 3px 5px; }
+          .diagram-stage { width: calc(100% - 16px); margin-inline: 8px; min-height: 360px; aspect-ratio: 1 / 1; }
+          .diagram-grid {
+            inset: 14px 10px;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 10px 8px;
+          }
+          .flow-node { width: 100%; min-height: 84px; padding: 8px; }
+          .inverter-node { min-height: 92px; }
+          .node-icon { flex-basis: 28px; width: 28px; height: 28px; }
+          .node-title { display: block; font-size: 9px; }
+          .node-copy strong { font-size: clamp(12px, 3.2vw, 16px); }
+          .node-status { font-size: 9px; }
+          .flow-label { padding: 3px 6px; font-size: 10px; }
+          .battery-label { left: 30%; top: 49%; }
+          .grid-label { left: 70%; top: 49%; }
           .performance-section { margin-inline: 8px; padding: 10px; }
           .efficiency-strip { gap: 8px; }
           .efficiency-item { min-height: 78px; gap: 9px; padding: 10px; }
@@ -1353,7 +1445,12 @@ class DeyeCloudEnergyFlowCardEditor extends HTMLElement {
   }
 
   _language() {
-    return this._hass?.language?.toLowerCase().startsWith("vi") ? "vi" : "en";
+    const rawLanguage =
+      this._hass?.language ||
+      this._hass?.locale?.language ||
+      window?.navigator?.language ||
+      "en";
+    return String(rawLanguage).toLowerCase().startsWith("vi") ? "vi" : "en";
   }
 
   _stationIds() {

@@ -1,12 +1,16 @@
 # Changelog
 
-## 2.2.1
+## 2.2.2
 
-- Redesigned the live performance area with larger gauges and clearer status hierarchy.
-- Moved power imbalance into a dedicated full-width diagnostic panel.
-- Redesigned today's energy metrics with larger icons, values, spacing and click affordances.
-- Added container-responsive layouts for narrow, standard and wide Home Assistant cards.
-- Improved mobile spacing and readability without changing entity discovery or energy calculations.
+- Redesigned the realtime diagram section with a cleaner, more spacious layout.
+- Reduced visual crowding between Solar, Battery, Inverter, Grid and Home nodes.
+- Made node cards larger and easier to read in narrow dashboard columns.
+- Showed line power badges only when a power flow is active to reduce clutter.
+- Fixed intermittent card render errors by hardening language detection and adding render error fallback.
+- Replaced the `hass-more-info` event with `CustomEvent` for better compatibility.
+- Added a safe in-card error state instead of a broken card when runtime issues occur.
+
+# Changelog
 
 ## 2.2.0
 
