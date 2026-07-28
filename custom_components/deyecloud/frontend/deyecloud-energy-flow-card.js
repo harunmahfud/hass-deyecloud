@@ -1,4 +1,4 @@
-const CARD_VERSION = "2.2.2";
+const CARD_VERSION = "2.2.3";
 const CARD_TAG = "deyecloud-energy-flow-card";
 const EDITOR_TAG = "deyecloud-energy-flow-card-editor";
 
@@ -1549,26 +1549,33 @@ if (!customElements.get(EDITOR_TAG)) {
 }
 
 window.customCards = window.customCards || [];
-if (!window.customCards.some((card) => card.type === CARD_TAG)) {
-  window.customCards.push({
-    type: CARD_TAG,
-    name: "DeyeCloud Energy Flow",
-    preview: true,
-    description: "Realtime animated solar, battery, grid and load flow for DeyeCloud.",
-    getEntitySuggestion: (hass, entityId) => {
-      const stationId = hass?.states?.[entityId]?.attributes?.station_id;
-      if (stationId === undefined || stationId === null) return null;
-      return {
-        config: {
-          type: `custom:${CARD_TAG}`,
-          station_id: String(stationId),
-          show_daily: true,
-          show_efficiency: true,
-          animation: true,
-        },
-      };
-    },
-  });
+const cardMetadata = {
+  type: CARD_TAG,
+  name: "DeyeCloud Energy Flow",
+  preview: false,
+  description: "Realtime animated solar, battery, grid and load flow for DeyeCloud.",
+  documentationURL: "https://github.com/heavenknows1978/hass-deyecloud",
+  getEntitySuggestion: (hass, entityId) => {
+    const stationId = hass?.states?.[entityId]?.attributes?.station_id;
+    if (stationId === undefined || stationId === null) return null;
+    return {
+      config: {
+        type: `custom:${CARD_TAG}`,
+        station_id: String(stationId),
+        show_daily: true,
+        show_efficiency: true,
+        animation: true,
+      },
+    };
+  },
+};
+const existingCardIndex = window.customCards.findIndex(
+  (card) => card.type === CARD_TAG
+);
+if (existingCardIndex === -1) {
+  window.customCards.push(cardMetadata);
+} else {
+  window.customCards[existingCardIndex] = cardMetadata;
 }
 
 console.info(

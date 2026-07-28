@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.3
+
+- Fixed the frontend resource cache key still using `v=2.2.1`.
+- Disabled long-lived HTTP caching for the bundled development resource path.
+- Disabled live card-picker preview to prevent `Custom element not found` race errors.
+- Replaces stale `window.customCards` metadata entries when a newer card version loads.
+- Registers the frontend resource from both integration setup paths for improved reliability.
+- Added the exact registered module URL to the Home Assistant log.
+
 ## 2.2.2
 
 - Redesigned the realtime diagram section with a cleaner, more spacious layout.

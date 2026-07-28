@@ -15,18 +15,18 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
-CARD_VERSION = "2.2.1"
+CARD_VERSION = "2.2.3"
 CARD_STATIC_URL = "/deyecloud/frontend"
 CARD_MODULE_URL = (
     f"{CARD_STATIC_URL}/deyecloud-energy-flow-card.js?v={CARD_VERSION}"
 )
-DATA_FRONTEND_REGISTERED = "frontend_registered"
+DATA_FRONTEND_MODULE_URL = "frontend_module_url"
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
     """Serve and automatically load the bundled Lovelace card."""
     domain_data = hass.data.setdefault(DOMAIN, {})
-    if domain_data.get(DATA_FRONTEND_REGISTERED):
+    if domain_data.get(DATA_FRONTEND_MODULE_URL) == CARD_MODULE_URL:
         return
 
     frontend_dir = Path(__file__).parent / "frontend"
@@ -36,11 +36,14 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         return
 
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(CARD_STATIC_URL, str(frontend_dir), True)]
+        [StaticPathConfig(CARD_STATIC_URL, str(frontend_dir), False)]
     )
     add_extra_js_url(hass, CARD_MODULE_URL)
-    domain_data[DATA_FRONTEND_REGISTERED] = True
-    _LOGGER.info("Registered bundled DeyeCloud Energy Flow card")
+    domain_data[DATA_FRONTEND_MODULE_URL] = CARD_MODULE_URL
+    _LOGGER.info(
+        "Registered bundled DeyeCloud Energy Flow card resource: %s",
+        CARD_MODULE_URL,
+    )
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -52,6 +55,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up DeyeCloud from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+    await _async_register_frontend(hass)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
