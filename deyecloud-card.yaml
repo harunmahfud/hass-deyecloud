@@ -1,6 +1,6 @@
 # The card JavaScript is bundled and loaded automatically by the integration.
 # No Lovelace resource entry and no extra HACS frontend card are required.
-type: custom:deyecloud-energy-flow-card-v2
+type: custom:deyecloud-energy-flow-card-v3
 show_daily: true
 show_efficiency: true
 animation: true

@@ -1,7 +1,7 @@
-const CARD_VERSION = "2.2.4";
-const CARD_TAG = "deyecloud-energy-flow-card-v2";
+const CARD_VERSION = "2.2.5";
+const CARD_TAG = "deyecloud-energy-flow-card-v3";
 const LEGACY_CARD_TAG = "deyecloud-energy-flow-card";
-const EDITOR_TAG = "deyecloud-energy-flow-card-v2-editor";
+const EDITOR_TAG = "deyecloud-energy-flow-card-v3-editor";
 const LEGACY_EDITOR_TAG = "deyecloud-energy-flow-card-editor";
 
 const POWER_METRICS = {
@@ -1571,7 +1571,10 @@ if (!customElements.get(LEGACY_EDITOR_TAG)) {
   customElements.define(LEGACY_EDITOR_TAG, DeyeCloudEnergyFlowCardEditorLegacy);
 }
 
-window.customCards = window.customCards || [];
+// IMPORTANT: mutate the existing registry in place. Home Assistant keeps a
+// reference to the original array; assigning a new array makes the card picker
+// wait forever for stale metadata and leaves a permanent spinner.
+const customCardsRegistry = window.customCards || (window.customCards = []);
 const cardMetadata = {
   type: CARD_TAG,
   name: "DeyeCloud Energy Flow",
@@ -1593,12 +1596,20 @@ const cardMetadata = {
   },
 };
 
-// Remove stale picker metadata from older releases so the picker exposes only
-// the cache-busting v2 tag. Existing YAML using the legacy tag still works.
-window.customCards = window.customCards.filter(
-  (card) => card.type !== LEGACY_CARD_TAG && card.type !== CARD_TAG
-);
-window.customCards.push(cardMetadata);
+for (let index = customCardsRegistry.length - 1; index >= 0; index -= 1) {
+  const type = String(customCardsRegistry[index]?.type || "");
+  if (type.startsWith("deyecloud-energy-flow-card")) {
+    customCardsRegistry.splice(index, 1);
+  }
+}
+
+if (customElements.get(CARD_TAG)) {
+  customCardsRegistry.push(cardMetadata);
+} else {
+  console.error(
+    `DeyeCloud card picker registration skipped: custom element ${CARD_TAG} was not defined.`
+  );
+}
 
 console.info(
   `%c DeyeCloud Energy Flow Card %c v${CARD_VERSION} `,

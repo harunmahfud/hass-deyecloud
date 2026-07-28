@@ -1,13 +1,13 @@
 # Changelog
 
-## 2.2.4
+## 2.2.5
 
-- Fixed the generic Home Assistant `Configuration error` card.
-- Made `setConfig()` tolerant of empty/incomplete card-picker configuration.
-- Added cache-safe card type `custom:deyecloud-energy-flow-card-v2`.
-- Added backward compatibility for `custom:deyecloud-energy-flow-card`.
-- Added a uniquely versioned JavaScript filename so older Custom Elements cannot remain active after an update.
-- Removed stale card-picker metadata from previous releases.
+- Fixed the permanent loading spinner in Home Assistant's card picker.
+- Mutated `window.customCards` in place instead of replacing the registry array.
+- Added a fresh `deyecloud-energy-flow-card-v3` custom element to bypass stale browser registrations.
+- Corrected the backend frontend-file existence check to validate the file that is actually served.
+- Added stale DeyeCloud card metadata cleanup without breaking Home Assistant's registry reference.
+- Preserved legacy YAML compatibility through the existing `custom:deyecloud-energy-flow-card` alias.
 
 ## 2.2.3
 

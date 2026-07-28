@@ -58,13 +58,13 @@ After updating the integration and restarting Home Assistant:
 Minimal YAML:
 
 ```yaml
-type: custom:deyecloud-energy-flow-card-v2
+type: custom:deyecloud-energy-flow-card
 ```
 
 Full example:
 
 ```yaml
-type: custom:deyecloud-energy-flow-card-v2
+type: custom:deyecloud-energy-flow-card
 station_id: "12345678"   # optional; auto-selected when only one station exists
 title: FJC Solar Plant    # optional
 show_daily: true
@@ -145,14 +145,3 @@ The bundled card provides a complete visual power-flow dashboard. A ready-to-pas
 ## 📄 License
 
 [MIT License](LICENSE)
-
-
-## v2.2.4 cache-safe card type
-
-For new cards, use:
-
-```yaml
-type: custom:deyecloud-energy-flow-card-v2
-```
-
-The legacy `custom:deyecloud-energy-flow-card` type remains supported after a full Home Assistant restart. The new `-v2` tag avoids stale Custom Elements already registered by older browser sessions.
