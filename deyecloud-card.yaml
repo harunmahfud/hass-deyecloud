@@ -1,6 +1,6 @@
 # The card JavaScript is bundled and loaded automatically by the integration.
 # No Lovelace resource entry and no extra HACS frontend card are required.
-type: custom:deyecloud-energy-flow-card
+type: custom:deyecloud-energy-flow-card-v2
 show_daily: true
 show_efficiency: true
 animation: true
@@ -10,3 +10,6 @@ animation: true
 
 # Optional custom title:
 # title: FJC Solar Plant
+
+# Legacy dashboards may keep using:
+# type: custom:deyecloud-energy-flow-card
