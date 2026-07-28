@@ -18,6 +18,10 @@ A custom integration to connect your Home Assistant with your Deye solar inverte
 - 📈 Sensors for current & last month, today, yesterday...
 - 🔃 Auto refresh every minute (no YAML needed)
 - ✅ Clean and simple setup via UI
+- ⚡ Bundled **DeyeCloud Energy Flow** Lovelace card (no separate frontend install)
+- 🖼️ Animated realtime PV → inverter → load / battery / grid diagram
+- 🔎 Automatic entity discovery by `station_id`, with multi-station selector
+- 🌗 Responsive light/dark design with Vietnamese and English labels
 
 ---
 
@@ -37,6 +41,48 @@ A custom integration to connect your Home Assistant with your Deye solar inverte
 2. Add: `https://github.com/heavenknows1978/hass-deyecloud` (as Integration)
 3. Search for "DeyeCloud" in HACS Integrations and install
 4. Restart Home Assistant and add via UI
+
+---
+
+
+## ⚡ Bundled Energy Flow Card
+
+Version 2.2.0 includes a dashboard card inside the integration itself. The integration serves and loads the card module automatically, so you do **not** need to install Sunsynk Power Flow Card or add a Lovelace resource manually.
+
+After updating the integration and restarting Home Assistant:
+
+1. Open a dashboard and choose **Edit dashboard → Add card**.
+2. Search for **DeyeCloud Energy Flow**.
+3. Select the station and options in the visual editor.
+
+Minimal YAML:
+
+```yaml
+type: custom:deyecloud-energy-flow-card
+```
+
+Full example:
+
+```yaml
+type: custom:deyecloud-energy-flow-card
+station_id: "12345678"   # optional; auto-selected when only one station exists
+title: FJC Solar Plant    # optional
+show_daily: true
+show_efficiency: true
+animation: true
+```
+
+The card automatically uses the integration's station sensors for:
+
+- Live solar generation and home consumption
+- Grid import/export direction and power
+- Battery charging/discharging direction, power and SOC
+- Today's production, consumption, import, export, charge and discharge
+- Instant self-sufficiency, on-site PV use and power-balance diagnostics
+
+Each diagram node can be tapped to open the corresponding Home Assistant entity. The animation updates whenever Home Assistant receives a new state; the DeyeCloud integration currently polls the cloud every minute.
+
+If the browser still has the old frontend after an update, restart Home Assistant and perform one hard refresh (`Ctrl+F5`).
 
 ---
 
@@ -82,11 +128,9 @@ Depending on your region:
 
 ---
 
-## 📸 Sample Dashboard
+## 📸 Dashboard
 
-> Sample Lovelace dashboard tiles showing PV generation, consumption, battery usage, grid stats etc.
-
-![Dashboard](https://raw.githubusercontent.com/heavenknows1978/hass-deyecloud/main/screenshot.png)
+The bundled card provides a complete visual power-flow dashboard. A ready-to-paste example is included in [`deyecloud-card.yaml`](deyecloud-card.yaml).
 
 ---
 

@@ -1010,8 +1010,38 @@ class DeyeCloudSensor(CoordinatorEntity, SensorEntity):
         """Return additional state attributes."""
         attrs = self._extra_attributes.copy()
 
+        attrs["sensor_type"] = self._sensor_type
+
+        if self._metric_key:
+            attrs["metric_key"] = self._metric_key
+
         if self._station_id:
             attrs["station_id"] = self._station_id
+            station_data = (self.coordinator.data or {}).get(self._station_id, {})
+            station_info = station_data.get("info", {}) or {}
+
+            station_name = (
+                station_info.get("name")
+                or station_info.get("stationName")
+                or station_info.get("plantName")
+            )
+            if station_name:
+                attrs["station_name"] = station_name
+
+            station_status = (
+                station_info.get("status")
+                or station_info.get("stationStatus")
+                or station_info.get("state")
+            )
+            if station_status is not None:
+                attrs["station_status"] = station_status
+
+            installed_capacity = (
+                station_info.get("installedCapacity")
+                or station_info.get("capacity")
+            )
+            if installed_capacity is not None:
+                attrs["installed_capacity"] = installed_capacity
 
         if self._sensor_type == "station_latest" and self._station_id:
             station_data = (self.coordinator.data or {}).get(self._station_id, {})
