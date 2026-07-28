@@ -1,4 +1,4 @@
-const CARD_VERSION = "2.2.0";
+const CARD_VERSION = "2.2.1";
 const CARD_TAG = "deyecloud-energy-flow-card";
 const EDITOR_TAG = "deyecloud-energy-flow-card-editor";
 
@@ -682,13 +682,21 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
         </section>
 
         ${this._config.show_efficiency === false ? "" : `
-          <section class="efficiency-strip">
-            ${this._efficiencyItem(t.selfSufficiency, selfSufficiency, "self", locale, t)}
-            ${this._efficiencyItem(t.solarUtilization, solarUtilization, "solar", locale, t)}
+          <section class="performance-section">
+            <div class="efficiency-strip">
+              ${this._efficiencyItem(t.selfSufficiency, selfSufficiency, "self", locale, t)}
+              ${this._efficiencyItem(t.solarUtilization, solarUtilization, "solar", locale, t)}
+            </div>
             <div class="balance-item ${Math.abs(balance) <= 80 ? "good" : "warn"}">
-              <span>${escapeHtml(t.powerBalance)}</span>
+              <span class="balance-icon">${this._miniIcon("balance")}</span>
+              <div class="balance-copy">
+                <span>${escapeHtml(t.powerBalance)}</span>
+                <small>${escapeHtml(Math.abs(balance) <= 80 ? t.balancedLevel : t.monitoring)}</small>
+              </div>
               <strong>${escapeHtml(formatPower(balance, locale))}</strong>
-              <div class="balance-line"><i style="width:${clamp(Math.abs(balance) / 20, 4, 100)}%"></i></div>
+              <div class="balance-line" aria-hidden="true">
+                <i style="width:${clamp(Math.abs(balance) / 20, 4, 100)}%"></i>
+              </div>
             </div>
           </section>`}
 
@@ -696,7 +704,7 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
           <section class="daily-section">
             <div class="section-heading">
               <div>
-                <span class="eyebrow">${escapeHtml(t.today)}</span>
+                <span class="section-kicker">24H</span>
                 <h3>${escapeHtml(t.today)}</h3>
               </div>
               <span>${escapeHtml(t.entityDetails)}</span>
@@ -705,7 +713,11 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
               ${dailyCards.map(([kind, label, value, entityId]) => `
                 <button class="daily-metric ${kind}" data-entity="${escapeHtml(entityId || "")}" ${entityId ? "" : "disabled"}>
                   <span class="daily-icon">${this._miniIcon(kind)}</span>
-                  <span><small>${escapeHtml(label)}</small><strong>${escapeHtml(formatEnergy(value, locale))}</strong></span>
+                  <span class="daily-copy">
+                    <small>${escapeHtml(label)}</small>
+                    <strong>${escapeHtml(formatEnergy(value, locale))}</strong>
+                  </span>
+                  ${entityId ? '<span class="daily-open" aria-hidden="true">›</span>' : ''}
                 </button>`).join("")}
             </div>
           </section>`}
@@ -735,7 +747,10 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
         <div class="ring" style="--progress:${pct * 3.6}deg">
           <span>${escapeHtml(formatPercent(value, locale))}</span>
         </div>
-        <div><span>${escapeHtml(label)}</span><small>${escapeHtml(level)}</small></div>
+        <div class="efficiency-copy">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(level)}</strong>
+        </div>
       </div>`;
   }
 
@@ -747,6 +762,7 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
       export: '<svg viewBox="0 0 24 24"><path d="M20 12H6M11 7l-5 5 5 5M20 5v14"/></svg>',
       charge: '<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="3"/><path d="M9 2h6M12 8v8M8 12h8"/></svg>',
       discharge: '<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="3"/><path d="M9 2h6M8 12h8"/></svg>',
+      balance: '<svg viewBox="0 0 24 24"><path d="m13 2-8 12h6l-1 8 9-13h-6z"/></svg>',
     };
     return icons[kind] || icons.sun;
   }
@@ -756,6 +772,7 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
       <style>
         :host {
           display: block;
+          container-type: inline-size;
           --deye-solar: #ffb31a;
           --deye-solar-soft: rgba(255, 179, 26, 0.18);
           --deye-battery: #20b486;
@@ -999,89 +1016,264 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
         .icon-battery-fill { fill: currentColor; opacity: .32; }
         .icon-bolt { fill: currentColor; opacity: .95; }
 
+        .performance-section {
+          margin: 14px 16px 0;
+          padding: 14px;
+          border: 1px solid var(--deye-border);
+          border-radius: 20px;
+          background:
+            linear-gradient(135deg, color-mix(in srgb, var(--deye-grid-soft) 48%, transparent), transparent 44%),
+            color-mix(in srgb, var(--deye-card) 96%, var(--deye-surface) 4%);
+        }
         .efficiency-strip {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 10px;
-          padding: 12px 16px 4px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
         }
-        .efficiency-item,
-        .balance-item {
+        .efficiency-item {
           min-width: 0;
-          min-height: 74px;
+          min-height: 88px;
           display: flex;
           align-items: center;
-          gap: 11px;
-          padding: 11px;
-          border-radius: 16px;
-          border: 1px solid var(--deye-border);
-          background: var(--deye-surface);
+          gap: 14px;
+          padding: 14px;
+          border-radius: 17px;
+          border: 1px solid color-mix(in srgb, currentColor 18%, var(--deye-border));
+          background: color-mix(in srgb, var(--deye-card) 94%, currentColor 6%);
+          box-shadow: 0 6px 18px rgba(18, 28, 45, .045);
         }
-        .efficiency-item > div:last-child,
-        .balance-item { min-width: 0; }
-        .efficiency-item span,
-        .balance-item > span { display: block; color: var(--deye-muted); font-size: 11px; }
-        .efficiency-item small { display: block; margin-top: 4px; color: var(--deye-text); font-size: 10px; font-weight: 700; }
+        .efficiency-copy { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+        .efficiency-copy span {
+          color: var(--deye-muted);
+          font-size: 11px;
+          line-height: 1.25;
+        }
+        .efficiency-copy strong {
+          color: var(--deye-text);
+          font-size: 13px;
+          line-height: 1.2;
+          font-weight: 750;
+        }
         .ring {
           --progress: 0deg;
-          flex: 0 0 48px;
-          width: 48px;
-          height: 48px;
+          flex: 0 0 58px;
+          width: 58px;
+          height: 58px;
           display: grid;
           place-items: center;
           border-radius: 50%;
-          background: conic-gradient(currentColor var(--progress), var(--deye-border) 0);
+          background: conic-gradient(currentColor var(--progress), color-mix(in srgb, currentColor 12%, var(--deye-border)) 0);
           position: relative;
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 10%, transparent);
         }
-        .ring::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: var(--deye-card); }
-        .ring span { position: relative; z-index: 1; color: var(--deye-text); font-size: 11px; font-weight: 800; }
+        .ring::before {
+          content: "";
+          position: absolute;
+          inset: 6px;
+          border-radius: 50%;
+          background: var(--deye-card);
+          box-shadow: inset 0 0 0 1px var(--deye-border);
+        }
+        .ring span {
+          position: relative;
+          z-index: 1;
+          color: var(--deye-text);
+          font-size: 12px;
+          font-weight: 800;
+        }
         .efficiency-item.self { color: var(--deye-grid); }
         .efficiency-item.solar { color: var(--deye-solar); }
-        .balance-item { display: flex; flex-direction: column; justify-content: center; align-items: stretch; gap: 3px; }
-        .balance-item strong { font-size: 18px; line-height: 1.2; }
-        .balance-line { width: 100%; height: 5px; border-radius: 999px; background: var(--deye-border); overflow: hidden; }
-        .balance-line i { display: block; height: 100%; max-width: 100%; border-radius: inherit; background: var(--deye-battery); }
-        .balance-item.warn .balance-line i { background: var(--deye-load); }
 
-        .daily-section { padding: 14px 16px 18px; }
-        .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-        .section-heading h3 { margin: 1px 0 0; font-size: 15px; }
-        .section-heading > span { color: var(--deye-muted); font-size: 10px; text-align: right; }
-        .eyebrow { display: none; }
-        .daily-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
-        .daily-metric {
+        .balance-item {
           min-width: 0;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          align-items: center;
+          column-gap: 12px;
+          row-gap: 8px;
+          margin-top: 12px;
+          padding: 13px 15px;
+          border: 1px solid color-mix(in srgb, var(--deye-battery) 24%, var(--deye-border));
+          border-radius: 17px;
+          background: color-mix(in srgb, var(--deye-card) 94%, var(--deye-battery-soft) 6%);
+        }
+        .balance-item.warn {
+          border-color: color-mix(in srgb, var(--deye-load) 28%, var(--deye-border));
+          background: color-mix(in srgb, var(--deye-card) 94%, var(--deye-load-soft) 6%);
+        }
+        .balance-icon {
+          grid-row: 1 / span 2;
+          width: 42px;
+          height: 42px;
+          display: grid;
+          place-items: center;
+          border-radius: 13px;
+          color: var(--deye-battery);
+          background: var(--deye-battery-soft);
+        }
+        .balance-item.warn .balance-icon { color: var(--deye-load); background: var(--deye-load-soft); }
+        .balance-icon svg {
+          width: 22px;
+          height: 22px;
+          fill: currentColor;
+          stroke: currentColor;
+          stroke-width: 1.5;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .balance-copy { min-width: 0; }
+        .balance-copy span { display: block; color: var(--deye-muted); font-size: 11px; }
+        .balance-copy small { display: block; margin-top: 3px; color: var(--deye-text); font-size: 11px; font-weight: 700; }
+        .balance-item > strong { font-size: 19px; line-height: 1.1; white-space: nowrap; }
+        .balance-line {
+          grid-column: 2 / -1;
+          width: 100%;
+          height: 7px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--deye-muted) 14%, transparent);
+          overflow: hidden;
+        }
+        .balance-line i {
+          display: block;
+          height: 100%;
+          max-width: 100%;
+          border-radius: inherit;
+          background: linear-gradient(90deg, color-mix(in srgb, var(--deye-battery) 70%, white), var(--deye-battery));
+        }
+        .balance-item.warn .balance-line i {
+          background: linear-gradient(90deg, color-mix(in srgb, var(--deye-load) 72%, white), var(--deye-load));
+        }
+
+        .daily-section {
+          margin: 14px 16px 18px;
+          padding: 16px;
+          border: 1px solid var(--deye-border);
+          border-radius: 20px;
+          background: color-mix(in srgb, var(--deye-card) 97%, var(--deye-surface) 3%);
+        }
+        .section-heading {
           display: flex;
           align-items: center;
-          gap: 9px;
-          padding: 10px;
+          justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+        .section-heading > div { display: flex; align-items: center; gap: 9px; min-width: 0; }
+        .section-heading h3 { margin: 0; font-size: 16px; line-height: 1.2; }
+        .section-heading > span { color: var(--deye-muted); font-size: 10px; text-align: right; }
+        .section-kicker {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 38px;
+          height: 25px;
+          padding: 0 8px;
+          border-radius: 999px;
+          color: var(--deye-grid);
+          background: var(--deye-grid-soft);
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: .05em;
+        }
+        .daily-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 11px;
+        }
+        .daily-metric {
+          position: relative;
+          min-width: 0;
+          min-height: 76px;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 12px;
+          padding: 13px 14px;
+          overflow: hidden;
           text-align: left;
           color: var(--deye-text);
           border: 1px solid var(--deye-border);
-          border-radius: 14px;
-          background: color-mix(in srgb, var(--deye-card) 94%, transparent);
+          border-radius: 17px;
+          background: color-mix(in srgb, var(--deye-card) 96%, transparent);
+          box-shadow: 0 5px 16px rgba(18, 28, 45, .035);
           cursor: pointer;
-          transition: transform .18s ease, background .18s ease;
+          transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
         }
-        .daily-metric:hover:not(:disabled) { transform: translateY(-1px); background: var(--deye-surface); }
+        .daily-metric::before {
+          content: "";
+          position: absolute;
+          inset: 0 auto 0 0;
+          width: 3px;
+          border-radius: 17px 0 0 17px;
+          background: currentColor;
+          opacity: .7;
+        }
+        .daily-metric:hover:not(:disabled) {
+          transform: translateY(-2px);
+          border-color: color-mix(in srgb, currentColor 24%, var(--deye-border));
+          box-shadow: 0 9px 22px rgba(18, 28, 45, .075);
+          background: color-mix(in srgb, var(--deye-card) 93%, currentColor 7%);
+        }
+        .daily-metric:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
         .daily-metric:disabled { cursor: default; opacity: .62; }
+        .daily-metric.sun { color: var(--deye-solar); }
+        .daily-metric.home { color: var(--deye-load); }
+        .daily-metric.import, .daily-metric.export { color: var(--deye-grid); }
+        .daily-metric.charge, .daily-metric.discharge { color: var(--deye-battery); }
         .daily-icon {
-          flex: 0 0 32px;
-          width: 32px;
-          height: 32px;
+          flex: 0 0 42px;
+          width: 42px;
+          height: 42px;
           display: grid;
           place-items: center;
-          border-radius: 10px;
+          border-radius: 13px;
           background: var(--deye-solar-soft);
           color: var(--deye-solar);
         }
         .daily-metric.home .daily-icon { background: var(--deye-load-soft); color: var(--deye-load); }
         .daily-metric.import .daily-icon, .daily-metric.export .daily-icon { background: var(--deye-grid-soft); color: var(--deye-grid); }
         .daily-metric.charge .daily-icon, .daily-metric.discharge .daily-icon { background: var(--deye-battery-soft); color: var(--deye-battery); }
-        .daily-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-        .daily-metric span:last-child { min-width: 0; }
-        .daily-metric small { display: block; color: var(--deye-muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .daily-metric strong { display: block; margin-top: 2px; font-size: 13px; white-space: nowrap; }
+        .daily-icon svg {
+          width: 22px;
+          height: 22px;
+          fill: none;
+          stroke: currentColor;
+          stroke-width: 1.8;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .daily-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .daily-metric small {
+          display: block;
+          color: var(--deye-muted);
+          font-size: 11px;
+          line-height: 1.25;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .daily-metric strong {
+          display: block;
+          color: var(--deye-text);
+          font-size: 15px;
+          line-height: 1.15;
+          white-space: nowrap;
+        }
+        .daily-open {
+          align-self: center;
+          color: color-mix(in srgb, currentColor 78%, var(--deye-muted));
+          font-size: 24px;
+          font-weight: 300;
+          line-height: 1;
+          opacity: .65;
+          transform: translateY(-1px);
+        }
+
+        @container (min-width: 720px) {
+          .performance-section { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 12px; }
+          .balance-item { margin-top: 0; }
+          .daily-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
 
         .empty-card {
           display: flex;
@@ -1120,10 +1312,17 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
           .node-copy strong { font-size: clamp(11px, 3.6vw, 15px); }
           .node-status { font-size: 8px; }
           .flow-label { padding: 3px 5px; }
-          .efficiency-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: 10px; }
-          .balance-item { grid-column: 1 / -1; min-height: 62px; }
-          .daily-section { padding-inline: 10px; }
-          .daily-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .performance-section { margin-inline: 8px; padding: 10px; }
+          .efficiency-strip { gap: 8px; }
+          .efficiency-item { min-height: 78px; gap: 9px; padding: 10px; }
+          .ring { flex-basis: 48px; width: 48px; height: 48px; }
+          .ring::before { inset: 5px; }
+          .efficiency-copy span { font-size: 10px; }
+          .efficiency-copy strong { font-size: 11px; }
+          .balance-item { padding: 11px 12px; }
+          .daily-section { margin-inline: 8px; padding: 12px; }
+          .daily-grid { grid-template-columns: 1fr; gap: 8px; }
+          .daily-metric { min-height: 68px; padding: 11px 12px; }
           .section-heading > span { display: none; }
         }
 

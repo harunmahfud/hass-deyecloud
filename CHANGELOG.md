@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.1
+
+- Redesigned the live performance area with larger gauges and clearer status hierarchy.
+- Moved power imbalance into a dedicated full-width diagnostic panel.
+- Redesigned today's energy metrics with larger icons, values, spacing and click affordances.
+- Added container-responsive layouts for narrow, standard and wide Home Assistant cards.
+- Improved mobile spacing and readability without changing entity discovery or energy calculations.
+
 ## 2.2.0
 
 - Bundled the new `custom:deyecloud-energy-flow-card` frontend card.

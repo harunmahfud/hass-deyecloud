@@ -15,7 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
-CARD_VERSION = "2.2.0"
+CARD_VERSION = "2.2.1"
 CARD_STATIC_URL = "/deyecloud/frontend"
 CARD_MODULE_URL = (
     f"{CARD_STATIC_URL}/deyecloud-energy-flow-card.js?v={CARD_VERSION}"

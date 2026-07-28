@@ -47,7 +47,7 @@ A custom integration to connect your Home Assistant with your Deye solar inverte
 
 ## ⚡ Bundled Energy Flow Card
 
-Version 2.2.0 includes a dashboard card inside the integration itself. The integration serves and loads the card module automatically, so you do **not** need to install Sunsynk Power Flow Card or add a Lovelace resource manually.
+Version 2.2.1 includes a dashboard card inside the integration itself. The integration serves and loads the card module automatically, so you do **not** need to install Sunsynk Power Flow Card or add a Lovelace resource manually.
 
 After updating the integration and restarting Home Assistant:
 
