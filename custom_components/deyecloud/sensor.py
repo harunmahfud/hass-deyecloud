@@ -33,7 +33,8 @@ from .const import (
 from .data import (
     _DAILY_ZERO_RECORD_KEYS,
     batched_device_serials,
-    empty_daily_record as _empty_daily_record,
+    parse_api_date as _parse_api_date_value,
+    resolve_today_record as _resolve_today_record,
     should_reject_stale_today as _should_reject_stale_today,
 )
 
@@ -76,45 +77,7 @@ _MIDNIGHT_STALE_GUARD = timedelta(hours=2)
 
 def _parse_api_date(value) -> date | None:
     """Parse a DeyeCloud date-like value into a date if possible."""
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
-        return value
-
-    # Some API regions return epoch timestamps (seconds or milliseconds).
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        try:
-            ts = float(value)
-            if ts > 1e12:  # milliseconds
-                ts /= 1000.0
-            if ts > 1e8:  # plausible epoch seconds (>1973)
-                return datetime.fromtimestamp(ts, tz=dt_util.DEFAULT_TIME_ZONE).date()
-        except (ValueError, OverflowError, OSError):
-            return None
-        return None
-
-    text = str(value).strip()
-    if not text:
-        return None
-
-    # Epoch given as a numeric string.
-    if text.isdigit() and len(text) >= 10:
-        return _parse_api_date(int(text))
-
-    # Common API formats: YYYY-MM-DD, YYYY-MM-DD HH:MM:SS,
-    # YYYY-MM-DDTHH:MM:SS..., YYYY/MM/DD.
-    text = text.replace("/", "-")
-    try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
-    except ValueError:
-        pass
-
-    try:
-        return datetime.strptime(text[:10], "%Y-%m-%d").date()
-    except ValueError:
-        return None
+    return _parse_api_date_value(value, dt_util.DEFAULT_TIME_ZONE)
 
 
 def _record_date(item: dict) -> date | None:
@@ -751,16 +714,17 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
                             )
 
                     if not daily_items:
-                        if d == today_date and day not in data["daily"]:
-                            # At midnight DeyeCloud may not have a valid record
-                            # for the new day yet. Today should start from 0,
-                            # not from yesterday's final value and not as
-                            # Unknown. If a same-date cached record already
-                            # exists, keep it: resetting Today to 0 during a
-                            # transient midday API outage would make
-                            # total_increasing statistics double-count the
-                            # recovery jump.
-                            data["daily"][day] = _empty_daily_record(day)
+                        if d == today_date:
+                            yesterday_key = (today_date - timedelta(days=1)).isoformat()
+                            resolved_today = _resolve_today_record(
+                                day,
+                                None,
+                                data["daily"].get(yesterday_key),
+                                data["daily"].get(day),
+                                in_midnight_guard=in_midnight_guard,
+                            )
+                            if resolved_today is not None:
+                                data["daily"][day] = resolved_today
                         # Otherwise keep same-date cached value if available.
                         continue
 
@@ -770,31 +734,33 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
                         allow_undated_fallback=not in_midnight_guard,
                     )
 
-                if matched_item is not None and d == today_date:
+                if d == today_date:
                     yesterday_key = (today_date - timedelta(days=1)).isoformat()
                     yesterday_record = data["daily"].get(yesterday_key)
                     cached_today = data["daily"].get(day)
-                    if _should_reject_stale_today(
+                    rejected_stale = _should_reject_stale_today(
                         matched_item,
                         yesterday_record,
                         cached_today,
                         in_midnight_guard=in_midnight_guard,
-                    ):
+                    )
+                    if rejected_stale:
                         _LOGGER.debug(
                             "Ignoring stale DeyeCloud daily record for station %s day %s",
                             station_id,
                             day,
                         )
-                        matched_item = _empty_daily_record(day)
-
-                if matched_item is not None:
+                    resolved_today = _resolve_today_record(
+                        day,
+                        matched_item,
+                        yesterday_record,
+                        cached_today,
+                        in_midnight_guard=in_midnight_guard,
+                    )
+                    if resolved_today is not None:
+                        data["daily"][day] = resolved_today
+                elif matched_item is not None:
                     data["daily"][day] = matched_item
-                elif d == today_date and day not in data["daily"]:
-                    # API returned only older/foreign/undated records. Do not map
-                    # them into Today, otherwise HA can record yesterday's total
-                    # into the new Energy Dashboard day. Keep an existing
-                    # same-date cached record instead of resetting to 0.
-                    data["daily"][day] = _empty_daily_record(day)
                 # Else keep same-date cached value if available.
 
             # Drop cached days no longer exposed by any sensor so the
@@ -965,12 +931,6 @@ class DeyeCloudSensor(CoordinatorEntity, SensorEntity):
                 date_str = _resolve_daily_date_key(self._date_key)
                 daily_data = station_data.get("daily", {}).get(date_str)
                 if daily_data is None:
-                    # Right after local midnight the entity already resolves to
-                    # the new date, but the coordinator may not have published
-                    # a record for it yet. Today must start the new day at 0
-                    # instead of going Unknown or holding yesterday's value.
-                    if self._date_key == "today":
-                        return 0.0
                     return None
                 return _as_float_or_original(daily_data.get(self._metric_key))
 
