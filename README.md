@@ -33,7 +33,7 @@ A custom integration to connect your Home Assistant with your Deye solar inverte
 2. Copy `custom_components/deyecloud/` into your `/config/custom_components/` directory in Home Assistant
 3. Restart Home Assistant
 4. Go to **Settings → Devices & Services → Add Integration → DeyeCloud**
-5. Fill in your credentials and API details
+5. Fill in your credentials, API details, and polling interval (60 seconds by default; minimum 10 seconds)
 
 ### Option 2: Via HACS
 
@@ -80,7 +80,7 @@ The card automatically uses the integration's station sensors for:
 - Today's production, consumption, import, export, charge and discharge
 - Instant self-sufficiency, on-site PV use and power-balance diagnostics
 
-Each diagram node can be tapped to open the corresponding Home Assistant entity. The animation updates whenever Home Assistant receives a new state; the DeyeCloud integration currently polls the cloud every minute.
+Each diagram node can be tapped to open the corresponding Home Assistant entity. The animation updates whenever Home Assistant receives a new state. The DeyeCloud integration polls the cloud every 60 seconds by default; this can be changed under **Settings → Devices & Services → DeyeCloud → Configure**.
 
 If the browser still has the old frontend after an update, restart Home Assistant and perform one hard refresh (`Ctrl+F5`).
 
