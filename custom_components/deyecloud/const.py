@@ -6,6 +6,10 @@ CONF_APP_ID = "app_id"
 CONF_APP_SECRET = "app_secret"
 CONF_BASE_URL = "base_url"
 CONF_START_MONTH = "start_month"
+CONF_POLLING_INTERVAL = "polling_interval"
+
+DEFAULT_POLLING_INTERVAL = 60
+MIN_POLLING_INTERVAL = 10
 
 # Optional. Required for some DeyeCloud installer/business accounts.
 # When set, token requests include companyId and stations are queried in the

@@ -11,6 +11,7 @@
           "app_secret": "App Secret",
           "base_url": "Base URL",
           "start_month": "Start month",
+          "polling_interval": "Polling interval (seconds, minimum 10)",
           "company_id": "Company ID (optional)"
         }
       }
@@ -24,7 +25,7 @@
     "step": {
       "init": {
         "title": "Configure DeyeCloud",
-        "description": "Update your DeyeCloud OpenAPI credentials.",
+        "description": "Update your DeyeCloud OpenAPI credentials and polling interval.",
         "data": {
           "username": "Username or email",
           "password": "Password",
@@ -32,6 +33,7 @@
           "app_secret": "App Secret",
           "base_url": "Base URL",
           "start_month": "Start month",
+          "polling_interval": "Polling interval (seconds, minimum 10)",
           "company_id": "Company ID (optional)"
         }
       }

@@ -27,6 +27,8 @@ from .const import (
     CONF_BASE_URL,
     CONF_START_MONTH,
     CONF_COMPANY_ID,
+    CONF_POLLING_INTERVAL,
+    DEFAULT_POLLING_INTERVAL,
 )
 from .data import (
     _DAILY_ZERO_RECORD_KEYS,
@@ -37,7 +39,6 @@ from .data import (
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(minutes=1)
 HISTORY_REFRESH_INTERVAL = timedelta(hours=6)
 HISTORY_START_MONTH = "2024-01"
 
@@ -500,7 +501,12 @@ class DeyeCloudCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="Deye Cloud",
-            update_interval=SCAN_INTERVAL,
+            update_interval=timedelta(
+                seconds=entry.data.get(
+                    CONF_POLLING_INTERVAL,
+                    DEFAULT_POLLING_INTERVAL,
+                )
+            ),
         )
         self.entry = entry
         self.session = async_get_clientsession(hass)

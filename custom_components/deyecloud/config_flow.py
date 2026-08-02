@@ -17,6 +17,9 @@ from .const import (
     CONF_BASE_URL,
     CONF_START_MONTH,
     CONF_COMPANY_ID,
+    CONF_POLLING_INTERVAL,
+    DEFAULT_POLLING_INTERVAL,
+    MIN_POLLING_INTERVAL,
 )
 from .api import async_get_token
 
@@ -54,6 +57,10 @@ def _data_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             CONF_START_MONTH,
             default=defaults.get(CONF_START_MONTH, DEFAULT_START_MONTH),
         ): str,
+        vol.Required(
+            CONF_POLLING_INTERVAL,
+            default=defaults.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL),
+        ): vol.All(vol.Coerce(int), vol.Range(min=MIN_POLLING_INTERVAL)),
         vol.Optional(
             CONF_COMPANY_ID,
             default=defaults.get(CONF_COMPANY_ID, ""),
