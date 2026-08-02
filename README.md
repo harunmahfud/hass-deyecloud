@@ -6,6 +6,10 @@
 - **Repo**: [hass-deyecloud](https://github.com/heavenknows1978/hass-deyecloud)  
 - **License**: MIT
 
+## 🤝 Contributors
+
+- [Mahfud Harun (@harunmahfud)](https://github.com/harunmahfud)
+
 # 🌞 Deye Cloud Home Assistant Integration
 
 A custom integration to connect your Home Assistant with your Deye solar inverter via the official Deye Cloud API.
