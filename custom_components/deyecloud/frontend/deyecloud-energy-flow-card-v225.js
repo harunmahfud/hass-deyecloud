@@ -64,9 +64,9 @@ const DAILY_METRICS = {
 const STRINGS = {
   vi: {
     defaultTitle: "Deye Solar Energy Flow",
-    live: "Đang hoạt động",
-    delayed: "Dữ liệu trễ",
-    unavailable: "Không có dữ liệu",
+    livePower: "Công suất trực tiếp",
+    delayedPower: "Công suất bị trễ",
+    unavailablePower: "Không có dữ liệu công suất",
     updated: "Cập nhật",
     station: "Trạm",
     solar: "Điện mặt trời",
@@ -83,6 +83,7 @@ const STRINGS = {
     balanced: "Cân bằng",
     supplying: "Đang cấp tải",
     today: "Năng lượng hôm nay",
+    sinceMidnight: "Từ nửa đêm",
     solarToday: "Sản lượng PV",
     loadToday: "Tiêu thụ",
     importToday: "Mua từ lưới",
@@ -109,9 +110,9 @@ const STRINGS = {
   },
   en: {
     defaultTitle: "Deye Solar Energy Flow",
-    live: "Live",
-    delayed: "Delayed data",
-    unavailable: "Unavailable",
+    livePower: "Live power",
+    delayedPower: "Delayed power",
+    unavailablePower: "Power unavailable",
     updated: "Updated",
     station: "Station",
     solar: "Solar array",
@@ -128,6 +129,7 @@ const STRINGS = {
     balanced: "Balanced",
     supplying: "Supplying load",
     today: "Today's energy",
+    sinceMidnight: "Since midnight",
     solarToday: "PV production",
     loadToday: "Consumption",
     importToday: "Grid import",
@@ -177,6 +179,31 @@ function stateNumber(stateObj) {
 
 function stateUnit(stateObj, fallback = "") {
   return stateObj?.attributes?.unit_of_measurement || fallback;
+}
+
+const POWER_UNIT_TO_W = { w: 1, kw: 1000 };
+const ENERGY_UNIT_TO_KWH = { wh: 0.001, kwh: 1, mwh: 1000 };
+
+function isCompatibleMetricState(stateObj, expectedDeviceClass) {
+  if (!stateObj) return false;
+  const deviceClass = stateObj.attributes?.device_class;
+  if (deviceClass && deviceClass !== expectedDeviceClass) return false;
+
+  const unit = String(stateUnit(stateObj)).trim().toLowerCase();
+  if (expectedDeviceClass === "power") return unit in POWER_UNIT_TO_W;
+  if (expectedDeviceClass === "energy") return unit in ENERGY_UNIT_TO_KWH;
+  return expectedDeviceClass === "battery" && unit === "%";
+}
+
+function normalizedMetricNumber(stateObj, expectedDeviceClass) {
+  if (!isCompatibleMetricState(stateObj, expectedDeviceClass)) return null;
+  const value = stateNumber(stateObj);
+  if (value === null) return null;
+
+  const unit = String(stateUnit(stateObj)).trim().toLowerCase();
+  if (expectedDeviceClass === "power") return value * POWER_UNIT_TO_W[unit];
+  if (expectedDeviceClass === "energy") return value * ENERGY_UNIT_TO_KWH[unit];
+  return value;
 }
 
 function formatPower(value, locale = "en") {
@@ -377,7 +404,15 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
   _findEntity(metricName, stationId) {
     const override = this._config.entities?.[metricName];
     if (override && this._hass?.states?.[override]) {
-      return { entityId: override, stateObj: this._hass.states[override] };
+      const expectedDeviceClass = DAILY_METRICS[metricName]
+        ? "energy"
+        : metricName === "battery_soc"
+          ? "battery"
+          : "power";
+      const stateObj = this._hass.states[override];
+      return isCompatibleMetricState(stateObj, expectedDeviceClass)
+        ? { entityId: override, stateObj }
+        : null;
     }
 
     const powerDefinition = POWER_METRICS[metricName];
@@ -503,36 +538,44 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
     };
 
     const values = {
-      solar: Math.max(0, stateNumber(entities.solar?.stateObj) ?? 0),
-      load: Math.max(0, stateNumber(entities.load?.stateObj) ?? 0),
-      gridExport: Math.max(0, stateNumber(entities.gridExport?.stateObj) ?? 0),
-      gridImport: Math.max(0, stateNumber(entities.gridImport?.stateObj) ?? 0),
-      batteryCharge: Math.max(0, stateNumber(entities.batteryCharge?.stateObj) ?? 0),
-      batteryDischarge: Math.max(0, stateNumber(entities.batteryDischarge?.stateObj) ?? 0),
-      battery: stateNumber(entities.battery?.stateObj),
-      soc: stateNumber(entities.soc?.stateObj),
-      solarToday: stateNumber(entities.solarToday?.stateObj),
-      loadToday: stateNumber(entities.loadToday?.stateObj),
-      gridExportToday: stateNumber(entities.gridExportToday?.stateObj),
-      gridImportToday: stateNumber(entities.gridImportToday?.stateObj),
-      batteryChargeToday: stateNumber(entities.batteryChargeToday?.stateObj),
-      batteryDischargeToday: stateNumber(entities.batteryDischargeToday?.stateObj),
+      solar: Math.max(0, normalizedMetricNumber(entities.solar?.stateObj, "power") ?? 0),
+      load: Math.max(0, normalizedMetricNumber(entities.load?.stateObj, "power") ?? 0),
+      gridExport: Math.max(0, normalizedMetricNumber(entities.gridExport?.stateObj, "power") ?? 0),
+      gridImport: Math.max(0, normalizedMetricNumber(entities.gridImport?.stateObj, "power") ?? 0),
+      batteryCharge: Math.max(0, normalizedMetricNumber(entities.batteryCharge?.stateObj, "power") ?? 0),
+      batteryDischarge: Math.max(0, normalizedMetricNumber(entities.batteryDischarge?.stateObj, "power") ?? 0),
+      battery: normalizedMetricNumber(entities.battery?.stateObj, "power"),
+      soc: normalizedMetricNumber(entities.soc?.stateObj, "battery"),
+      solarToday: normalizedMetricNumber(entities.solarToday?.stateObj, "energy"),
+      loadToday: normalizedMetricNumber(entities.loadToday?.stateObj, "energy"),
+      gridExportToday: normalizedMetricNumber(entities.gridExportToday?.stateObj, "energy"),
+      gridImportToday: normalizedMetricNumber(entities.gridImportToday?.stateObj, "energy"),
+      batteryChargeToday: normalizedMetricNumber(entities.batteryChargeToday?.stateObj, "energy"),
+      batteryDischargeToday: normalizedMetricNumber(entities.batteryDischargeToday?.stateObj, "energy"),
     };
 
-    const allCurrentEntities = [
+    const allPowerEntities = [
       entities.solar,
       entities.load,
       entities.gridExport,
       entities.gridImport,
+      entities.gridNet,
       entities.batteryCharge,
       entities.batteryDischarge,
-      entities.soc,
+      entities.battery,
     ];
-    const latestDate = this._latestEntityDate(allCurrentEntities);
+    const currentPowerEntities = allPowerEntities.filter(
+      (item) => normalizedMetricNumber(item?.stateObj, "power") !== null
+    );
+    const latestDate = this._latestEntityDate(currentPowerEntities);
     const ageMs = latestDate ? Date.now() - latestDate.getTime() : Number.POSITIVE_INFINITY;
-    const currentAvailable = allCurrentEntities.some((item) => stateNumber(item?.stateObj) !== null);
+    const currentAvailable = currentPowerEntities.length > 0;
     const isLive = currentAvailable && ageMs <= 3 * 60 * 1000;
-    const statusText = !currentAvailable ? t.unavailable : isLive ? t.live : t.delayed;
+    const statusText = !currentAvailable
+      ? t.unavailablePower
+      : isLive
+        ? t.livePower
+        : t.delayedPower;
     const statusClass = !currentAvailable ? "offline" : isLive ? "online" : "delayed";
 
     const threshold = 5;
@@ -555,7 +598,7 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
       ? values.gridImport
       : gridExportActive
         ? values.gridExport
-        : Math.abs(stateNumber(entities.gridNet?.stateObj) ?? 0);
+        : Math.abs(normalizedMetricNumber(entities.gridNet?.stateObj, "power") ?? 0);
     const batteryDisplayPower = batteryChargeActive
       ? values.batteryCharge
       : batteryDischargeActive
@@ -684,7 +727,7 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
               ${node({
                 className: "inverter-node active",
                 title: t.inverter,
-                status: currentAvailable ? t.supplying : t.unavailable,
+                status: currentAvailable ? t.supplying : t.unavailablePower,
                 value: formatPower(values.load + values.gridExport + values.batteryCharge, locale),
                 icon: iconInverter(),
                 entityId: entities.load?.entityId || entities.solar?.entityId,
@@ -736,7 +779,7 @@ class DeyeCloudEnergyFlowCard extends HTMLElement {
           <section class="daily-section">
             <div class="section-heading">
               <div>
-                <span class="section-kicker">24H</span>
+                <span class="section-kicker">${escapeHtml(t.sinceMidnight)}</span>
                 <h3>${escapeHtml(t.today)}</h3>
               </div>
               <span>${escapeHtml(t.entityDetails)}</span>

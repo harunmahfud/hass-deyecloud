@@ -82,6 +82,25 @@ The card automatically uses the integration's station sensors for:
 
 Each diagram node can be tapped to open the corresponding Home Assistant entity. The animation updates whenever Home Assistant receives a new state. The DeyeCloud integration polls the cloud every 60 seconds by default; this can be changed under **Settings → Devices & Services → DeyeCloud → Configure**.
 
+### Home Assistant Energy Dashboard sources
+
+For the Energy Dashboard, select only the live **Today** entities that accumulate
+through the current calendar day:
+
+- **Daily Grid Import Today** (`purchaseValue`) for grid consumption
+- **Daily Grid Export Today** (`gridValue`) for return to grid
+- **Daily Solar Generation Today** (`generationValue`) for solar production
+
+Do not select Yesterday, Day Before Yesterday, Last Month, or fixed-month
+entities. Those entities are historical snapshots retained for dashboards and
+backward-compatible long-term statistics; they are not accumulating meters.
+
+On the day the integration is installed, Home Assistant uses the first observed
+`total_increasing` value as its statistics baseline. The Energy Dashboard will
+therefore normally show only energy accumulated after that first observation,
+not the full DeyeCloud calendar-day total. A complete day starts after the next
+local midnight.
+
 If the browser still has the old frontend after an update, restart Home Assistant and perform one hard refresh (`Ctrl+F5`).
 
 ---
