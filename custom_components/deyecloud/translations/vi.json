@@ -11,8 +11,10 @@
           "app_secret": "App Secret",
           "base_url": "Base URL",
           "start_month": "Tháng bắt đầu",
-          "polling_interval": "Chu kỳ cập nhật (giây, tối thiểu 10)",
-          "company_id": "Company ID (không bắt buộc)"
+          "company_id": "Company ID (không bắt buộc)",
+          "card_language": "Ngôn ngữ thẻ",
+          "scan_interval": "Chu kỳ cập nhật (phút)",
+          "enable_control": "Bật điều khiển từ xa (thay đổi cài đặt thật của inverter)"
         }
       }
     },
@@ -25,7 +27,7 @@
     "step": {
       "init": {
         "title": "Cấu hình DeyeCloud",
-        "description": "Cập nhật thông tin DeyeCloud OpenAPI và chu kỳ cập nhật.",
+        "description": "Cập nhật thông tin DeyeCloud OpenAPI, ngôn ngữ thẻ và chu kỳ cập nhật. Tăng chu kỳ nếu vượt hạn mức API của DeyeCloud.",
         "data": {
           "username": "Tên đăng nhập hoặc email",
           "password": "Mật khẩu",
@@ -33,8 +35,10 @@
           "app_secret": "App Secret",
           "base_url": "Base URL",
           "start_month": "Tháng bắt đầu",
-          "polling_interval": "Chu kỳ cập nhật (giây, tối thiểu 10)",
-          "company_id": "Company ID (không bắt buộc)"
+          "company_id": "Company ID (không bắt buộc)",
+          "card_language": "Ngôn ngữ thẻ",
+          "scan_interval": "Chu kỳ cập nhật (phút)",
+          "enable_control": "Bật điều khiển từ xa (thay đổi cài đặt thật của inverter)"
         }
       }
     },

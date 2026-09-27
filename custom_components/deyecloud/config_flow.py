@@ -18,14 +18,47 @@ from .const import (
     CONF_START_MONTH,
     CONF_COMPANY_ID,
     CONF_POLLING_INTERVAL,
-    DEFAULT_POLLING_INTERVAL,
-    MIN_POLLING_INTERVAL,
+    CONF_CARD_LANGUAGE,
+    DEFAULT_CARD_LANGUAGE,
+    CARD_LANGUAGES,
+    CONF_SCAN_INTERVAL,
+    CONF_ENABLE_CONTROL,
+    DEFAULT_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
+    MAX_SCAN_INTERVAL,
 )
 from .api import async_get_token
 
 
 DEFAULT_BASE_URL = "https://eu1-developer.deyecloud.com/v1.0"
 DEFAULT_START_MONTH = "2024-01"
+
+# Fields that affect authentication/station access. Changing only the start
+# month or polling interval must not require a round trip to DeyeCloud.
+_CONNECTION_FIELDS = (
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    CONF_APP_ID,
+    CONF_APP_SECRET,
+    CONF_BASE_URL,
+    CONF_COMPANY_ID,
+)
+
+
+def _scan_interval_default(defaults: dict[str, Any]) -> int:
+    """Return minutes, migrating the fork's legacy seconds-based setting."""
+    value = defaults.get(CONF_SCAN_INTERVAL)
+    if value is None and CONF_POLLING_INTERVAL in defaults:
+        try:
+            seconds = int(defaults[CONF_POLLING_INTERVAL])
+            value = (seconds + 59) // 60
+        except (TypeError, ValueError):
+            pass
+    try:
+        minutes = int(value if value is not None else DEFAULT_SCAN_INTERVAL)
+    except (TypeError, ValueError):
+        minutes = DEFAULT_SCAN_INTERVAL
+    return min(MAX_SCAN_INTERVAL, max(MIN_SCAN_INTERVAL, minutes))
 
 
 def _data_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -57,14 +90,25 @@ def _data_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             CONF_START_MONTH,
             default=defaults.get(CONF_START_MONTH, DEFAULT_START_MONTH),
         ): str,
-        vol.Required(
-            CONF_POLLING_INTERVAL,
-            default=defaults.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL),
-        ): vol.All(vol.Coerce(int), vol.Range(min=MIN_POLLING_INTERVAL)),
         vol.Optional(
             CONF_COMPANY_ID,
             default=defaults.get(CONF_COMPANY_ID, ""),
         ): str,
+        vol.Required(
+            CONF_CARD_LANGUAGE,
+            default=defaults.get(CONF_CARD_LANGUAGE, DEFAULT_CARD_LANGUAGE),
+        ): vol.In(CARD_LANGUAGES),
+        vol.Required(
+            CONF_SCAN_INTERVAL,
+            default=_scan_interval_default(defaults),
+        ): vol.All(
+            vol.Coerce(int),
+            vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
+        ),
+        vol.Required(
+            CONF_ENABLE_CONTROL,
+            default=defaults.get(CONF_ENABLE_CONTROL, False),
+        ): bool,
     })
 
 
@@ -80,6 +124,7 @@ def _normalize_user_input(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_BASE_URL,
         CONF_START_MONTH,
         CONF_COMPANY_ID,
+        CONF_CARD_LANGUAGE,
     ):
         if key in data and isinstance(data[key], str):
             data[key] = data[key].strip()
@@ -190,7 +235,15 @@ class DeyeCloudOptionsFlowHandler(config_entries.OptionsFlow):
             user_input = _normalize_user_input(user_input)
 
             try:
-                await _async_validate_credentials_and_stations(self.hass, user_input)
+                connection_changed = any(
+                    user_input.get(key) != current_data.get(key)
+                    for key in _CONNECTION_FIELDS
+                )
+                if connection_changed:
+                    await _async_validate_credentials_and_stations(
+                        self.hass,
+                        user_input,
+                    )
 
                 self.hass.config_entries.async_update_entry(
                     self._config_entry,

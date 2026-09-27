@@ -25,7 +25,8 @@ A custom integration to connect your Home Assistant with your Deye solar inverte
 - ⚡ Bundled **DeyeCloud Energy Flow** Lovelace card (no separate frontend install)
 - 🖼️ Animated realtime PV → inverter → load / battery / grid diagram
 - 🔎 Automatic entity discovery by `station_id`, with multi-station selector
-- 🌗 Responsive light/dark design with Vietnamese and English labels
+- 🔆 Per-panel optimizer production (today and this month) for stations with Deye optimizers
+- 🌗 Responsive light/dark design with English, Vietnamese, Russian and Spanish labels
 
 ---
 
@@ -37,7 +38,7 @@ A custom integration to connect your Home Assistant with your Deye solar inverte
 2. Copy `custom_components/deyecloud/` into your `/config/custom_components/` directory in Home Assistant
 3. Restart Home Assistant
 4. Go to **Settings → Devices & Services → Add Integration → DeyeCloud**
-5. Fill in your credentials, API details, and polling interval (60 seconds by default; minimum 10 seconds)
+5. Fill in your credentials, API details, and update interval (1 minute by default)
 
 ### Option 2: Via HACS
 
@@ -74,6 +75,7 @@ title: FJC Solar Plant    # optional
 show_daily: true
 show_efficiency: true
 animation: true
+show_controls: true      # inverter controls, when remote control is enabled
 ```
 
 The card automatically uses the integration's station sensors for:
@@ -84,7 +86,9 @@ The card automatically uses the integration's station sensors for:
 - Today's production, consumption, import, export, charge and discharge
 - Instant self-sufficiency, on-site PV use and power-balance diagnostics
 
-Each diagram node can be tapped to open the corresponding Home Assistant entity. The animation updates whenever Home Assistant receives a new state. The DeyeCloud integration polls the cloud every 60 seconds by default; this can be changed under **Settings → Devices & Services → DeyeCloud → Configure**.
+When **Enable remote control** is on, the card adds an **Inverter control** section: work mode and energy priority pickers, grid charge / solar sell / time-of-use switches, a 24-hour time-of-use timeline with the current slot highlighted, and editable current and power limits. Every change asks for confirmation before it is sent, shows progress while the inverter is confirming, and reports success or failure. Hide it with `show_controls: false`.
+
+Each diagram node can be tapped to open the corresponding Home Assistant entity. The animation updates whenever Home Assistant receives a new state. The DeyeCloud integration polls the cloud every minute by default; this can be changed under **Settings → Devices & Services → DeyeCloud → Configure**.
 
 ### Home Assistant Energy Dashboard sources
 
@@ -148,6 +152,46 @@ Depending on your region:
 | App Secret  | From developer portal |
 | Base URL    | Based on your region |
 | Start Month | First month to fetch history from (e.g. `2024-01`) |
+| Company ID  | Optional. Required for some installer/business accounts |
+| Update interval | Polling interval in minutes (1–60, default 1). Raise it if DeyeCloud API quotas are reached. Can be changed later under **Configure** without re-entering credentials. |
+| Enable remote control | Off by default. Adds inverter control entities and services (see below). |
+
+---
+
+## 🎛️ Remote Control (experimental)
+
+Enable **Enable remote control** under **Settings → Devices & services → DeyeCloud → Configure**. These entities and services change real inverter and battery settings through the DeyeCloud OpenAPI, so test each one carefully on your system first.
+
+Entities added to each inverter device:
+
+| Entity | Type | DeyeCloud endpoint |
+|--------|------|--------------------|
+| Work mode (`SELLING_FIRST` / `ZERO_EXPORT_TO_LOAD` / `ZERO_EXPORT_TO_CT`) | select | `/order/sys/workMode/update` |
+| Energy pattern (`BATTERY_FIRST` / `LOAD_FIRST`) | select | `/order/sys/energyPattern/update` |
+| Grid charge | switch | `/order/battery/modeControl` |
+| Solar sell | switch | `/order/sys/solarSell/control` |
+| Time of use | switch | `/strategy/dynamicControl` |
+| Max charge / discharge current (A) | number | `/order/battery/parameter/update` |
+| Grid charge current (A) | number | `/strategy/dynamicControl` |
+| Max sell / solar power (W) | number | `/order/sys/power/update` |
+
+Services:
+
+- `deyecloud.set_time_of_use`: replace the six time-of-use slots (time, power, SOC, grid charge) and the active days.
+- `deyecloud.set_battery_strategy`: apply `force_charge`, `self_consumption` (backup reserve), `hold_soc` or `feed_in` with a target SOC. This overwrites all six time-of-use slots.
+- `deyecloud.read_settings`: return the raw register map read from the inverter (plus decoded `/config/system` values where supported).
+
+Every command waits for the inverter to confirm it through `/order/{orderId}`. An unanswered command is retried once and then reported as an error. Most inverters cannot report these settings back in decoded form, so the entities show the last value the inverter confirmed.
+
+Example automation action, force charging from the grid during a cheap tariff:
+
+```yaml
+action: deyecloud.set_battery_strategy
+data:
+  strategy: force_charge
+  target_soc: 90
+  power: 3000
+```
 
 ---
 

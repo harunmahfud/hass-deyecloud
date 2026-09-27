@@ -11,8 +11,10 @@
           "app_secret": "App Secret",
           "base_url": "Base URL",
           "start_month": "Start month",
-          "polling_interval": "Polling interval (seconds, minimum 10)",
-          "company_id": "Company ID (optional)"
+          "company_id": "Company ID (optional)",
+          "card_language": "Card language",
+          "scan_interval": "Update interval (minutes)",
+          "enable_control": "Enable remote control (changes real inverter settings)"
         }
       }
     },
@@ -25,7 +27,7 @@
     "step": {
       "init": {
         "title": "Configure DeyeCloud",
-        "description": "Update your DeyeCloud OpenAPI credentials and polling interval.",
+        "description": "Update your DeyeCloud OpenAPI credentials, card language and polling interval. Increase the interval if DeyeCloud API quotas are reached.",
         "data": {
           "username": "Username or email",
           "password": "Password",
@@ -33,8 +35,10 @@
           "app_secret": "App Secret",
           "base_url": "Base URL",
           "start_month": "Start month",
-          "polling_interval": "Polling interval (seconds, minimum 10)",
-          "company_id": "Company ID (optional)"
+          "company_id": "Company ID (optional)",
+          "card_language": "Card language",
+          "scan_interval": "Update interval (minutes)",
+          "enable_control": "Enable remote control (changes real inverter settings)"
         }
       }
     },

@@ -6,12 +6,32 @@ CONF_APP_ID = "app_id"
 CONF_APP_SECRET = "app_secret"
 CONF_BASE_URL = "base_url"
 CONF_START_MONTH = "start_month"
+# Legacy key used by fork releases through 2.2.5. New releases store minutes
+# in CONF_SCAN_INTERVAL instead.
 CONF_POLLING_INTERVAL = "polling_interval"
+CONF_CARD_LANGUAGE = "card_language"
 
-DEFAULT_POLLING_INTERVAL = 60
-MIN_POLLING_INTERVAL = 10
+DEFAULT_CARD_LANGUAGE = "auto"
+CARD_LANGUAGES = {
+    "auto": "Home Assistant",
+    "en": "English",
+    "ru": "Русский",
+    "vi": "Tiếng Việt",
+    "es": "Español",
+}
 
 # Optional. Required for some DeyeCloud installer/business accounts.
 # When set, token requests include companyId and stations are queried in the
 # business/company context instead of the personal-user context.
 CONF_COMPANY_ID = "company_id"
+
+# Polling interval in minutes. DeyeCloud announced OpenAPI quotas/rate limits,
+# so users need to be able to back off without patching the source (#29).
+CONF_SCAN_INTERVAL = "scan_interval"
+DEFAULT_SCAN_INTERVAL = 1
+MIN_SCAN_INTERVAL = 1
+MAX_SCAN_INTERVAL = 60
+
+# Remote control entities/services (#13). Off by default because they change
+# real inverter and battery settings.
+CONF_ENABLE_CONTROL = "enable_control"

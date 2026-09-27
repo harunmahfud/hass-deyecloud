@@ -163,3 +163,97 @@ def resolve_today_record(
     if in_midnight_guard:
         return empty_daily_record(day)
     return None
+
+
+def unique_keys(keys) -> list[str]:
+    """Return non-empty string keys once each, preserving order.
+
+    /device/measurePoints can list the same key twice (seen for
+    GeneratorFrequency/GenVoltage), which produced duplicate unique IDs.
+    """
+    seen = set()
+    result = []
+    for key in keys:
+        if isinstance(key, str) and key and key not in seen:
+            seen.add(key)
+            result.append(key)
+    return result
+
+
+def derive_today_from_month(
+    day: str,
+    month_record: dict | None,
+    previous_days: list[dict],
+    cached_today: dict | None,
+) -> dict | None:
+    """Derive Today as current-month total minus the month's earlier days.
+
+    On the last day of a month DeyeCloud returns no daily bucket for the
+    in-progress day: it needs endAt >= tomorrow, and any range ending in a
+    month that has not started yet comes back empty (issue #25). The monthly
+    bucket does include today, so subtract the already-closed days.
+    """
+    if not month_record:
+        return None
+
+    record = {"date": day, "_deyecloud_derived": True}
+    for key in _DAILY_ZERO_RECORD_KEYS:
+        month_total = _numeric_value(month_record, key)
+        if month_total is None:
+            record[key] = None
+            continue
+        closed = sum(_numeric_value(item, key) or 0.0 for item in previous_days)
+        value = max(0.0, round(month_total - closed, 2))
+
+        # Monthly and daily buckets are rounded separately, so the difference
+        # can wobble by ~0.1 kWh. Today is total_increasing: never let it
+        # drop within the same day or HA would count a meter reset.
+        if cached_today and cached_today.get("date") == day:
+            previous = _numeric_value(cached_today, key)
+            if previous is not None and previous > value:
+                value = previous
+        record[key] = value
+
+    return record
+
+
+def optimizer_production(
+    data_list,
+    day: str,
+    previous: dict | None = None,
+) -> dict:
+    """Today / current-month production of one optimizer.
+
+    `data_list` is the `dataList` of /device/history with granularity 2
+    (one bucket per day) requested from the first day of the month to
+    `day`. Optimizers only report a daily `Production` bucket through the
+    OpenAPI; their live power is not exposed (issue #28).
+    """
+    today = 0.0
+    month = 0.0
+    for bucket in data_list or []:
+        if not isinstance(bucket, dict):
+            continue
+        value = None
+        for item in bucket.get("itemList") or []:
+            if isinstance(item, dict) and item.get("key") == "Production":
+                try:
+                    value = float(item.get("value"))
+                except (TypeError, ValueError):
+                    value = None
+                break
+        if value is None:
+            continue
+        month += value
+        if str(bucket.get("time")) == day:
+            today = value
+
+    today = round(today, 2)
+    month = round(month, 2)
+    # Both are total_increasing meters: never let cloud rounding move them
+    # backwards within the same day / month.
+    if previous and previous.get("date") == day:
+        today = max(today, previous.get("today") or 0.0)
+    if previous and str(previous.get("date", ""))[:7] == day[:7]:
+        month = max(month, previous.get("month") or 0.0)
+    return {"date": day, "today": today, "month": month}
