@@ -1,7 +1,9 @@
-const CARD_VERSION = "2.6.0";
-const CARD_TAG = "deyecloud-energy-flow-card-v3";
+const CARD_VERSION = "2.6.1";
+const CARD_TAG = "deyecloud-energy-flow-card-v4";
+const PREVIOUS_CARD_TAG = "deyecloud-energy-flow-card-v3";
 const LEGACY_CARD_TAG = "deyecloud-energy-flow-card";
-const EDITOR_TAG = "deyecloud-energy-flow-card-v3-editor";
+const EDITOR_TAG = "deyecloud-energy-flow-card-v4-editor";
+const PREVIOUS_EDITOR_TAG = "deyecloud-energy-flow-card-v3-editor";
 const LEGACY_EDITOR_TAG = "deyecloud-energy-flow-card-editor";
 
 const POWER_METRICS = {
@@ -2793,9 +2795,17 @@ if (!customElements.get(EDITOR_TAG)) {
 }
 
 // Backward compatibility for dashboards that already use
-// custom:deyecloud-energy-flow-card. A separate subclass is required because
-// the Custom Elements specification does not allow registering one constructor
-// under two tag names.
+// v3 or custom:deyecloud-energy-flow-card. Separate subclasses are required
+// because the Custom Elements specification does not allow registering one
+// constructor under multiple tag names.
+if (!customElements.get(PREVIOUS_CARD_TAG)) {
+  class DeyeCloudEnergyFlowCardV3 extends DeyeCloudEnergyFlowCard {}
+  customElements.define(PREVIOUS_CARD_TAG, DeyeCloudEnergyFlowCardV3);
+}
+if (!customElements.get(PREVIOUS_EDITOR_TAG)) {
+  class DeyeCloudEnergyFlowCardEditorV3 extends DeyeCloudEnergyFlowCardEditor {}
+  customElements.define(PREVIOUS_EDITOR_TAG, DeyeCloudEnergyFlowCardEditorV3);
+}
 if (!customElements.get(LEGACY_CARD_TAG)) {
   class DeyeCloudEnergyFlowCardLegacy extends DeyeCloudEnergyFlowCard {}
   customElements.define(LEGACY_CARD_TAG, DeyeCloudEnergyFlowCardLegacy);

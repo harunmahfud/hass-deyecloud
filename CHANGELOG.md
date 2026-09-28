@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.6.1
+
+- Fixed the permanent spinner and unselectable DeyeCloud card in Home Assistant's card picker after upgrading from an older frontend. The picker now uses a fresh `deyecloud-energy-flow-card-v4` custom element and a new module cache key.
+- Preserved existing dashboards that use either `custom:deyecloud-energy-flow-card-v3` or `custom:deyecloud-energy-flow-card`.
+
 ## 2.6.0
 
 - Optimizers (issue #28): each optimizer in the station now gets its own device, linked to the station, with **Production Today** and **Production This Month** sensors (kWh, `total_increasing`), so per-panel output can be compared and added to the Energy Dashboard.
